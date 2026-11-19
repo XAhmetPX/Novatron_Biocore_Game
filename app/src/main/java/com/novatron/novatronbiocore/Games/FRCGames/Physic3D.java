@@ -15,7 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.novatron.novatronbiocore.GamePanel;
-import com.novatron.novatronbiocore.Games.FRCGames.Rebuilt.FRCGameRebuilt.FuelBall;
 import com.novatron.novatronbiocore.tools.Viewport;
 
 
@@ -317,10 +316,13 @@ public class Physic3D{
 
         //-----------------------------ÇARPIŞMA OLAYLARI-----------------------------
         //Dinleyiciler çözücü (Physic.solveCollisions) bittikten SONRA, pozisyonlar kesinleşince çağrılır.
-        //Temasın başladığı karede bir kez tetiklenir (temas sürerken her karede tekrar tetiklenmez),
+        //entityIntersectListener temasın başladığı karede bir kez tetiklenir (temas sürerken her karede tekrar tetiklenmez; onun için entityStayListener),
         //o yüzden "sayıyı arttır" gibi işlemler için güvenlidir. Callback içinde entity silmek/taşımak da güvenlidir.
         public EntityIntersectListener entityIntersectListener;
         public WallIntersectListener wallIntersectListener;
+        /** Temas SÜRDÜĞÜ her karede çağrılır (başladığı kare hariç: o kareyi entityIntersectListener alır). Örn. tümsek:
+         *  değdiği sürece her karede ivme uygular. Sensörlerde de çalışır. Yalnızca gerçek temas sayılır (histerezis yok). */
+        public EntityStayListener entityStayListener;
 
         public interface EntityIntersectListener{
             /**
@@ -330,6 +332,16 @@ public class Physic3D{
              *                    "yeterince sert çarptı mı?" gibi kontroller için kullanılabilir
              */
             void onIntersectWithEntity(PhysicsEntity other, float impactSpeed);
+        }
+        public interface EntityStayListener{
+            /**
+             * Bu cisim 'other' ile temas etmeye DEVAM EDİYOR (önceki karede de temastaydı, bu karede de). Çözücüden sonra çağrılır;
+             * burada hız/konum değiştirmek serbest, ama etkisi bir sonraki karenin update/çözümünde görülür.
+             * Temasın ilk karesinde bunun yerine onIntersectWithEntity çağrılır, yani temas boyunca her karede tam bir çağrı gelir.
+             * Çift içinde 'a' ve 'b' ikisinin de dinleyicisi varsa ikisi de çağrılır (karşılıklı).
+             * @param other temas edilen cisim
+             */
+            void onStayWithEntity(PhysicsEntity other);
         }
         public interface WallIntersectListener{
             //x ekseni duvarları: x = 0 (X_MIN) ve x = fieldWidth (X_MAX); z ekseni duvarları: z = 0 (Z_MIN) ve z = fieldDepth (Z_MAX)
@@ -734,7 +746,11 @@ public class Physic3D{
             if(!pairTouch[p]) continue;
             PhysicsEntity a = bodies[pairA[p]];
             PhysicsEntity b = bodies[pairB[p]];
-            if(a.wasTouching(b)) continue; //temas zaten sürüyordu, yeni bir olay değil
+            if(a.wasTouching(b)){ //temas zaten sürüyordu: yeni olay değil, "devam ediyor" olayı
+                if(a.entityStayListener != null) a.entityStayListener.onStayWithEntity(b);
+                if(b.entityStayListener != null) b.entityStayListener.onStayWithEntity(a);
+                continue;
+            }
 
             if(a.entityIntersectListener != null) a.entityIntersectListener.onIntersectWithEntity(b, pairImpact[p]);
             if(b.entityIntersectListener != null) b.entityIntersectListener.onIntersectWithEntity(a, pairImpact[p]);
@@ -863,13 +879,12 @@ public class Physic3D{
 
     /** a ve b kesişiyorsa 'mtv'yi doldurur: normal b'den a'ya doğrudur (a bu yönde itilirse ayrılırlar) */
     private boolean computeContact(PhysicsEntity a, PhysicsEntity b){
-        //TODO iki top arasında genel kesişim olarak yap
-        if(a instanceof FuelBall && b instanceof FuelBall){
+        if(a instanceof Ball && b instanceof Ball){
             float dx = a.position.x - b.position.x;
             float dz = a.position.z - b.position.z;
 
             float dist2 = (dx * dx) + (dz * dz);
-            float radiusSum = FuelBall.RADIUS + FuelBall.RADIUS;
+            float radiusSum = ((Ball)a).getRadius() + ((Ball)b).getRadius();
 
             if(dist2 >= radiusSum * radiusSum) return false;
 
@@ -1496,6 +1511,74 @@ public class Physic3D{
         //TODO resim eklendiğinde silinecekler
         protected abstract Viewport getViewport();
         protected abstract GamePanel getGamePanel();
+    }
+
+    public static abstract class Ball extends PhysicsEntity{
+
+        public Ball(float startX, float startY, float startZ, float startHeading, float mass, float restitution, float height){
+            super(startX, startY, startZ, startHeading, mass, restitution, height);
+
+            //8 noktalı dairesel çokgen hitbox
+            int numPoints = 8;
+            float[] vertices = new float[numPoints * 2];
+            for(int i = 0; i < numPoints; i++){
+                float angle = (float)(i * 2 * Math.PI / numPoints);
+                vertices[i * 2] = getRadius() * (float)Math.cos(angle); //x
+                vertices[i * 2 + 1] = getRadius() * (float)Math.sin(angle); //z
+            }
+
+            this.hitbox = new Polygon(vertices);
+            this.hitbox.setOrigin(0, 0);
+            maxBoundingSize = getRadius()*2;
+            preHitbox = new android.graphics.RectF();
+        }
+
+        @Override
+        public void update(float dt){
+            //bir yüzeyin üstündeysek: çok kaygan, yüzeyin merkezinden dışarı doğru kay (kenara varınca düşer)
+            if(supportedBy != null && world != null){
+                float dx = position.x - supportedBy.position.x;
+                float dz = position.z - supportedBy.position.z;
+                float d = (float) Math.sqrt(dx * dx + dz * dz);
+                if(d < getSlideCenterRadius()){
+                    float ang = world.random.nextFloat() * MathUtils.PI2;
+                    dx = (float) Math.cos(ang);
+                    dz = (float) Math.sin(ang);
+                }
+                else{
+                    dx /= d;
+                    dz /= d;
+                }
+                velocity.x += dx * getSurfaceSlideAccel() * dt;
+                velocity.z += dz * getSurfaceSlideAccel() * dt;
+            }
+
+            //yerde yuvarlanırken sürtünme ile yavaşlama (havadayken ve yerden fırlatıldığı karede yok)
+            if(position.y <= 0f && velocity.y <= 0f)
+                applyPlanarFriction(velocity, getGroundFriction() * dt);
+
+            //konum güncellemesi (yatay), sonra dikey (yerçekimi)
+            position.x += velocity.x * dt;
+            position.z += velocity.z * dt;
+            updateHitboxPosition(); //yüzey aramasının güncel (x, z)'yi görmesi için dikeyden önce
+            updateVertical(dt);
+
+            //hitbox'ı güncelle ve duvarlardan sekmesini sağla
+            updateHitboxPosition();
+            handleWallCollisions();
+            updateBroadphase();
+        }
+
+        @Override //toplar üst üste yığılmaz
+        public boolean canSupport(){ return false; }
+
+        public abstract float getRadius();
+        /** Yüzey merkezine bu kadar yakınsa (m) kayma yönü belirsizdir: dünyanın rastgelesinden bir yön seçilir */
+        public abstract float getSlideCenterRadius();
+        /** Bir yüzeyin (robot, engel) üstünde duran topun yüzeyin merkezinden uzağa kayma ivmesi (m/s²): üstte kalmaz */
+        public abstract float getSurfaceSlideAccel();
+        /** Zemin üzerindeki yuvarlanma sürtünmesi */
+        public abstract float getGroundFriction();
     }
 
     /**

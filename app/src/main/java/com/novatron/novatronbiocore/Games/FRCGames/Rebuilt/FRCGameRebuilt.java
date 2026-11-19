@@ -5,8 +5,6 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.view.MotionEvent;
 
-import com.badlogic.gdx.math.MathUtils;
-import com.badlogic.gdx.math.Polygon;
 import com.novatron.novatronbiocore.Configs;
 import com.novatron.novatronbiocore.GamePanel;
 import com.novatron.novatronbiocore.Games.FRCGames.AutoActions;
@@ -214,7 +212,7 @@ public class FRCGameRebuilt implements Game{
             else{
                 //oyun bitti
                 time = 0;
-//                state = State.GAME_OVER;
+                state = State.GAME_OVER;
             }
         }
     }
@@ -475,7 +473,7 @@ public class FRCGameRebuilt implements Game{
         final float RED_OBSTACLES_CENTER_Z = ALLIANCE_ZONE_DEPTH + HUB_D/2f;
         //-------------------KIRMIZI-------------------
         //merkez
-        addHub(RED_OBSTACLES_CENTER_Z);
+        addHub(RED_OBSTACLES_CENTER_Z, false);
         //hendek 1
         addTrench(RED_OBSTACLES_CENTER_Z, false);
         //hendek 2
@@ -486,12 +484,14 @@ public class FRCGameRebuilt implements Game{
         addBump(RED_OBSTACLES_CENTER_Z, true);
         //kule
         addTower(true);
+        //kule filesi
+        addTent(RED_OBSTACLES_CENTER_Z + 0.8919f);
 
 
         final float BLUE_OBSTACLES_CENTER_Z = FIELD_DEPTH_METERS - (ALLIANCE_ZONE_DEPTH + HUB_D/2f);
         //---------------------MAVİ--------------------
         //merkez
-        addHub(BLUE_OBSTACLES_CENTER_Z);
+        addHub(BLUE_OBSTACLES_CENTER_Z, true);
         //hendek 1
         addTrench(BLUE_OBSTACLES_CENTER_Z, false);
         //hendek 2
@@ -502,14 +502,32 @@ public class FRCGameRebuilt implements Game{
         addBump(BLUE_OBSTACLES_CENTER_Z, true);
         //kule
         addTower(false);
+        //kule filesi
+        addTent(BLUE_OBSTACLES_CENTER_Z - 0.8919f);
     }
-    private void addHub(float startZ){
+    private void addHub(float startZ, boolean isBlueHub){
         physic.addEntity(new Physic3D.Obstacle(
-                FIELD_WIDTH_METERS/2f, 0,
-                startZ, 0,
-                HUB_W, HUB_H, HUB_D,
-                viewport, gp.ui.fontDebug
-        ));
+                FIELD_WIDTH_METERS/2f, 0, startZ, 0,
+                HUB_W, HUB_H, HUB_D, viewport, gp.ui.fontDebug){
+
+            private final int signum = (isBlueHub) ? -1 : 1;
+
+            @Override
+            protected void onEntityLanded(Physic3D.PhysicsEntity landed){
+                if(getWorld() == null) return;
+                if(!(landed instanceof FuelBall)) return;
+
+                if(isBlueHub) blueAllianceScore++;
+                else redAllianceScore++;
+
+                java.util.Random r = getWorld().random;
+
+                float ballStartZ = this.startZ + (signum * (HUB_D/2f + FuelBall.RADIUS + 0.02f));
+                float vz = (r.nextFloat() * 8f + 6f) * signum;
+                landed.respawn(landed.position.x, HUB_H/2f, ballStartZ,
+                        landed.velocity.x * r.nextFloat(), 0, vz);
+            }
+        });
     }
     private void addTrench(float startZ, boolean subtractFieldWidth){
         //çubuk
@@ -526,10 +544,9 @@ public class FRCGameRebuilt implements Game{
     private void addBump(float startZ, boolean subtractFieldWidth){
         float startX = (subtractFieldWidth) ? FIELD_WIDTH_METERS - (TRENCH_STICK_W + TRENCH_BODY_W + BUMP_W/2f)
                 : TRENCH_STICK_W + TRENCH_BODY_W + BUMP_W/2f;
-        physic.addEntity(new Physic3D.Obstacle(
-                startX, -BUMP_H/2f, startZ, 0,
-                BUMP_W, BUMP_H, BUMP_D, viewport, gp.ui.fontDebug)
-                .setSensor(true));
+
+        physic.addEntity(new Physic3D.Obstacle(startX, -BUMP_H/2f, startZ, 0,
+                BUMP_W, BUMP_H, BUMP_D, viewport, gp.ui.fontDebug).setSensor(true));
     }
     private void addTower(boolean isRedAlliance){
         float startZ = (isRedAlliance) ? TOWER_Z_OFFSET : FIELD_DEPTH_METERS - TOWER_Z_OFFSET;
@@ -538,6 +555,17 @@ public class FRCGameRebuilt implements Game{
                 TOWER_W, TOWER_H, TOWER_D, viewport, gp.ui.fontDebug
         ));
     }
+    private void addTent(float startZ){
+        physic.addEntity(new Physic3D.Obstacle(
+                FIELD_WIDTH_METERS/2f, HUB_H, startZ, 0,
+                1.4419f, 1.6299f, 0.05f, viewport, gp.ui.fontDebug){
+            {
+                //canlının yataydaki hızını sonlandır
+                entityIntersectListener = (other, impactSpeed) -> other.velocity.set(other.velocity.x*0.01f, other.velocity.y, 0);
+            }
+        });
+    }
+
     private void updateIntakeLabel(){
         final CanvasButton btn = btnIntake;
         if(btn == null) return;
@@ -606,18 +634,9 @@ public class FRCGameRebuilt implements Game{
     @Override
     public int getLogoTextureID(){ return -1; }
 
-    public static class FuelBall extends Physic3D.PhysicsEntity{
+    public static class FuelBall extends Physic3D.Ball{
 
         public static final float RADIUS          = 0.07506f; //25 cm çap (0.075m yarıçap)
-        public static final float HEIGHT          = RADIUS * 2f; //topun yüksekliği (çap)
-        public static final float MASS            = 0.215f;   //215 gram (Hafif FRC topu)
-        public static final float RESTITUTION     = 0.75f;  //yüksek sekme oranı (%75 esneklik)
-        public static final float GROUND_FRICTION = 3.0f;   //halı üzerindeki yuvarlanma sürtünmesi (m/s²)
-
-        /** Bir yüzeyin (robot, engel) üstünde duran topun yüzeyin merkezinden uzağa kayma ivmesi (m/s²): üstte kalmaz */
-        private static final float SURFACE_SLIDE_ACCEL = 4.0f;
-        /** Yüzey merkezine bu kadar yakınsa (m) kayma yönü belirsizdir: dünyanın rastgelesinden bir yön seçilir */
-        private static final float SLIDE_CENTER_RADIUS = 0.03f;
 
         //çizim: üstten görünüşte yükseklik, topun büyümesiyle ve zeminde bir gölgeyle gösterilir
         private static final float HEIGHT_DRAW_SCALE = 0.5f;  //her 1 m yükseklik için yarıçap +%50
@@ -633,65 +652,12 @@ public class FRCGameRebuilt implements Game{
         private final Paint ballPaint = new Paint();
 
         public FuelBall(float startX, float startY, float startZ, FRCGameRebuilt frcGameRebuilt){
-            super(startX, startY, startZ, 0f, MASS, RESTITUTION, HEIGHT);
+            super(startX, startY, startZ, 0f, 0.215f, 0.75f, RADIUS * 2f);
             this.frcGameRebuilt = frcGameRebuilt;
 
             ballPaint.setColor(Color.YELLOW);
             ballPaint.setStyle(Paint.Style.FILL);
             ballPaint.setAntiAlias(true);
-
-            //8 noktalı dairesel çokgen hitbox
-            int numPoints = 8;
-            float[] vertices = new float[numPoints * 2];
-            for(int i = 0; i < numPoints; i++){
-                float angle = (float) (i * 2 * Math.PI / numPoints);
-                vertices[i * 2]     = RADIUS * (float) Math.cos(angle); //x
-                vertices[i * 2 + 1] = RADIUS * (float) Math.sin(angle); //z
-            }
-
-            this.hitbox = new Polygon(vertices);
-            this.hitbox.setOrigin(0, 0);
-            maxBoundingSize = RADIUS*2;
-            preHitbox = new android.graphics.RectF();
-        }
-
-        @Override
-        public boolean canSupport(){ return false; } //toplar üst üste yığılmaz
-
-        @Override
-        public void update(float dt){
-            //bir yüzeyin üstündeysek: çok kaygan, yüzeyin merkezinden dışarı doğru kay (kenara varınca düşer)
-            if(supportedBy != null && world != null){
-                float dx = position.x - supportedBy.position.x;
-                float dz = position.z - supportedBy.position.z;
-                float d = (float) Math.sqrt(dx * dx + dz * dz);
-                if(d < SLIDE_CENTER_RADIUS){
-                    float ang = world.random.nextFloat() * MathUtils.PI2;
-                    dx = (float) Math.cos(ang);
-                    dz = (float) Math.sin(ang);
-                }
-                else{
-                    dx /= d;
-                    dz /= d;
-                }
-                velocity.x += dx * SURFACE_SLIDE_ACCEL * dt;
-                velocity.z += dz * SURFACE_SLIDE_ACCEL * dt;
-            }
-
-            //yerde yuvarlanırken sürtünme ile yavaşlama (havadayken ve yerden fırlatıldığı karede yok)
-            if(position.y <= 0f && velocity.y <= 0f)
-                applyPlanarFriction(velocity, GROUND_FRICTION * dt);
-
-            //konum güncellemesi (yatay), sonra dikey (yerçekimi)
-            position.x += velocity.x * dt;
-            position.z += velocity.z * dt;
-            updateHitboxPosition(); //yüzey aramasının güncel (x, z)'yi görmesi için dikeyden önce
-            updateVertical(dt);
-
-            //hitbox'ı güncelle ve duvarlardan sekmesini sağla
-            updateHitboxPosition();
-            handleWallCollisions();
-            updateBroadphase();
         }
 
         @Override
@@ -716,6 +682,15 @@ public class FRCGameRebuilt implements Game{
             //topu ekrana daire olarak çiz
             canvas.drawCircle(ballPxX, ballPxY, ballPxRadius, ballPaint);
         }
+
+        /** Topun yarı çapı */
+        @Override public float getRadius(){ return RADIUS; }
+        /** Yüzey merkezine bu kadar yakınsa (m) kayma yönü belirsizdir: dünyanın rastgelesinden bir yön seçilir */
+        @Override public float getSlideCenterRadius(){ return 0.03f; }
+        /** Bir yüzeyin (robot, engel) üstünde duran topun yüzeyin merkezinden uzağa kayma ivmesi (m/s²): üstte kalmaz */
+        @Override public float getSurfaceSlideAccel(){return 4.0f; }
+        /** Zemin üzerindeki yuvarlanma sürtünmesi */
+        @Override public float getGroundFriction(){ return 3.0f; }
     }
 
     public class RobotRebuilt extends Physic3D.Robot{
