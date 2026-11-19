@@ -1,0 +1,28 @@
+<resources>
+    <string name="app_name">Novatron Biocore</string>
+
+    <!--Title screen-->
+    <string name="play">Play</string>
+    <string name="settings">Setting</string>
+
+    <!-- Game state -->
+    <string name="max">MAX: </string>
+    <string name="time">TIME: </string>
+
+    <!-- Continue or again state -->
+    <string name="again">AGAIN</string>
+    <string name="next">NEXT</string>
+    <string name="title_screen">TITLE SCREEN</string>
+
+    <!-- Game Over -->
+    <string name="game_over">GAME OVER</string>
+
+    <!-- Taking root game -->
+    <string name="root">ROOT</string>
+    <string name="mark">MARK</string>
+    <string name="go_to_marked">GO TO MARKED</string>
+
+    <!-- FRC GAME -->
+    <string name="intake">Intake:\n</string>
+    <string name="shoot">Shoot</string>
+</resources>
