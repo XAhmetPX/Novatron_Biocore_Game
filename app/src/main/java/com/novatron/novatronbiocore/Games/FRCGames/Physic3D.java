@@ -51,7 +51,7 @@ public class Physic3D{
     private final List<PhysicsEntity> surfaces = new ArrayList<>();
 
     /** Dünyanın tohumlu rastgele sayı üreteci (örn. yüzeyin tam ortasında duran topun hangi yöne kayacağı için). */
-    public final java.util.Random random = new java.util.Random(20260101L);
+    public final java.util.Random random = new java.util.Random();
 
     //fizik motoru için geçici değişkenler
     //DİKKAT: libGDX'in 2D tipleri (MinimumTranslationVector.normal, Rectangle, Polygon) yer düzleminde (x-z) çalışır;
@@ -609,6 +609,7 @@ public class Physic3D{
         /** Cismin tepesi (y + height) */
         public float getTop(){ return position.y + height; }
         /** y aralıkları örtüşüyor mu? Üst üste değmek (biri diğerinin tepesinde) örtüşmek sayılmaz. */
+        @SuppressWarnings("BooleanMethodIsAlwaysInverted")
         public boolean overlapsY(PhysicsEntity o){
             return position.y < o.position.y + o.height && o.position.y < position.y + height;
         }
@@ -1103,6 +1104,7 @@ public class Physic3D{
         //KONTROL GİRDİLERİ
         protected float inputX, inputZ;
         protected float targetHeading = Float.NaN;
+        private RobotBrain brain; //teleop esnasında karar veren mekanizma
 
         //INTAKE
         /** Intake algılama kutusu: robotla birlikte hareket eder ve döner. Çarpışmaya katılmaz. */
@@ -1222,6 +1224,7 @@ public class Physic3D{
             intakeActive = false;
             setInputs(0, 0, NO_TURN);
             isAutonomous = false;
+            if(brain != null) brain.reset(this);
         }
 
         @Override
@@ -1235,6 +1238,8 @@ public class Physic3D{
         /** @param dt geçen süre (60 TPS için dt = 1/60f ≈ 0.0166s) */
         @Override
         public void update(float dt){
+
+            if(brain != null) brain.update(this, dt);
 
             //otonomda veya bot ise otonom aksiyonları çalıştır
             if(isAutonomous || !isPlayerRobot()){
@@ -1438,6 +1443,7 @@ public class Physic3D{
 
         /** Şu an atış yapılabilir mi? Taban kural: dünyada, bekleme süresi bitmiş ve intake'te yakıt var.
          * Alt sınıflar (örn. hedefe ulaşılabilir mi?) super.canShoot'u çağırıp kendi koşullarını ekler. */
+        @SuppressWarnings("BooleanMethodIsAlwaysInverted")
         public boolean canShoot(float targetX, float targetY, float targetZ){
             return world != null && shooterDelayCounter <= 0f && intakeCount > 0;
         }

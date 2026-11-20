@@ -6,7 +6,7 @@ import com.novatron.novatronbiocore.Games.FRCGames.Physic3D;
 import com.novatron.novatronbiocore.Games.FRCGames.AutoActions;
 
 /**
- * Robotların otonom aksiyonlarını kuran metotlar. Her metot Robot.setAutoScript(...) ile bir robota bağlanır
+ * FRC Rebuilt sezonundaki robotların otonom aksiyonlarını kuran metotlar. Her metot Robot.setAutoScript(...) ile bir robota bağlanır
  * (örn. robot.setAutoScript(AutoActionSetter::setRobot2Autonomous)) ve robot her sıfırlandığında çağrılır.
  * Aksiyonlar tek kullanımlıktır: her çağrıda new ile baştan oluşturulmalı (zaten böyle olur).
  * <br>
@@ -37,8 +37,6 @@ public final class AutoActionSetter{
                 4.90f, 7.80f,
                 5.50f, 6.0f,
                 5.90f, 2.80f));
-        //atış için hub'a dön (opsiyonel)
-        actions.addAutoTask(new AutoActions.TurnToPoint(4f, 4.6f));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,1f));
         //hub'a intake boşalana kadar atış yap
@@ -81,8 +79,8 @@ public final class AutoActionSetter{
                 5.45f, 0.50f,
                 5.10f, 2.0f,
                 3.90f, 2.45f));
-        //atış için hub'a dön (opsiyonel)
-        actions.addAutoTask(new AutoActions.TurnToPoint(4f, 4.6f));
+        if(((FRCGameRebuilt.RobotRebuilt)robot).shouldTurnTarget) //gerekiyorsa hedefe dön
+            actions.addAutoTask(new AutoActions.TurnToPoint(4f, 4.6f));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.3f));
         //hub'a intake boşalana kadar atış yap
@@ -108,8 +106,8 @@ public final class AutoActionSetter{
         actions.addAutoTask(new AutoActions.WaitTimeout(true, 0.2f));
         //geri git
         actions.addAutoTask(new AutoActions.DriveToPosition(2.40f, 2.60f, 3f, false));
-        //atış için hub'a dön (opsiyonel)
-        actions.addAutoTask(new AutoActions.TurnToPoint(4f, 4.6f));
+        if(((FRCGameRebuilt.RobotRebuilt)robot).shouldTurnTarget) //gerekiyorsa hedefe dön
+            actions.addAutoTask(new AutoActions.TurnToPoint(4f, 4.6f));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.5f));
         //hub'a intake boşalana kadar atış yap
@@ -133,6 +131,8 @@ public final class AutoActionSetter{
                 2.50f, 6.20f,
                 2.40f, 4.00f,
                 1.90f, 2.40f));
+        if(((FRCGameRebuilt.RobotRebuilt)robot).shouldTurnTarget) //gerekiyorsa hedefe dön
+            actions.addAutoTask(new AutoActions.TurnToPoint(4f, 4.6f));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.3f));
         //hub'a intake boşalana kadar atış yap
@@ -159,8 +159,8 @@ public final class AutoActionSetter{
                 7.70f, 9.85f,
                 7.85f, 11.60f,
                 7.20f, 13.25f));
-        //atış için hub'a dön (opsiyonel)
-        actions.addAutoTask(new AutoActions.TurnToPoint(4f, 11.75f));
+        if(((FRCGameRebuilt.RobotRebuilt)robot).shouldTurnTarget) //gerekiyorsa hedefe dön
+            actions.addAutoTask(new AutoActions.TurnToPoint(4f, 11.815f));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.1f));
         //hub'a intake boşalana kadar atış yap
@@ -185,6 +185,8 @@ public final class AutoActionSetter{
                 3.90f, 8.80f,
                 2.30f, 9.90f,
                 2.40f, 13.75f));
+        if(((FRCGameRebuilt.RobotRebuilt)robot).shouldTurnTarget) //gerekiyorsa hedefe dön
+            actions.addAutoTask(new AutoActions.TurnToPoint(4f, 11.815f));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.1f));
         //hub'a intake boşalana kadar atış yap
@@ -212,8 +214,8 @@ public final class AutoActionSetter{
                 5.00f, 10.20f,
                 5.95f, 12.10f,
                 5.40f, 13.70f));
-        //atış için hub'a dön (opsiyonel)
-        actions.addAutoTask(new AutoActions.TurnToPoint(4f, 11.75f));
+        if(((FRCGameRebuilt.RobotRebuilt)robot).shouldTurnTarget) //gerekiyorsa hedefe dön
+            actions.addAutoTask(new AutoActions.TurnToPoint(4f, 11.815f));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.5f));
         //hub'a intake boşalana kadar atış yap
@@ -237,8 +239,6 @@ public final class AutoActionSetter{
                 2.70f, 8.70f,
                 2.15f, 10.60f,
                 2.40f, 14.00f));
-        //atış için hub'a dön (opsiyonel)
-        actions.addAutoTask(new AutoActions.TurnToPoint(4f, 11.75f));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.05f));
         //hub'a intake boşalana kadar atış yap

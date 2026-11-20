@@ -25,4 +25,5 @@
     <!-- FRC GAME -->
     <string name="intake">Intake:\n</string>
     <string name="shoot">Shoot</string>
+    <string name="you">You</string>
 </resources>
