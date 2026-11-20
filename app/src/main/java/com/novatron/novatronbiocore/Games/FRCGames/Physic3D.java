@@ -51,7 +51,7 @@ public class Physic3D{
     private final List<PhysicsEntity> surfaces = new ArrayList<>();
 
     /** Dünyanın tohumlu rastgele sayı üreteci (örn. yüzeyin tam ortasında duran topun hangi yöne kayacağı için). */
-    public final java.util.Random random = new java.util.Random();
+    public final java.util.Random random = new java.util.Random(102022026L);
 
     //fizik motoru için geçici değişkenler
     //DİKKAT: libGDX'in 2D tipleri (MinimumTranslationVector.normal, Rectangle, Polygon) yer düzleminde (x-z) çalışır;
@@ -161,6 +161,101 @@ public class Physic3D{
             entity.gridIndex = -1;
         }
         return entities.remove(entity);
+    }
+
+    //-------------------------------ALAN SORGULARI (ızgara tabanlı)-------------------------------
+    /** findNearest / countNear için süzgeç: true dönen cisimler sorguya dahil olur. İçinde dünyayı değiştirme. */
+    public interface EntityFilter{
+        boolean accept(PhysicsEntity e);
+    }
+
+    /** Izgaranın cisim konumlarından en fazla bu kadar (m) eski olabileceği varsayılır (kare içi hareket); böylece sorgular
+     *  update döngüsünün ortasında (örn. bot beyni) da güvenlidir. */
+    private static final float QUERY_SLACK = 0.25f;
+
+    /**
+     * (x, z)'ye yer düzleminde (y yok sayılır) en yakın, süzgeçten geçen cismi döndürür; maxRadius içinde yoksa null.
+     * Merkezler arası mesafe ölçülür. Izgarada halka halka dışa doğru aranır; bulunan en iyi mesafe, henüz bakılmamış
+     * halkaların alt sınırından küçük kalınca durur, yani cisim sayısına değil yakınlığa bağlı çalışır. Sonuç tüm cisimleri
+     * tarayan sorguyla aynı MESAFEYİ verir (eşit mesafede hangisinin döneceği tanımsızdır).
+     * Saha dışına taşmış (kenar hücreye sıkıştırılmış) cisimler için alt sınır garanti edilmez.
+     */
+    public PhysicsEntity findNearest(float x, float z, float maxRadius, EntityFilter filter){
+        if(!(maxRadius >= 0f)) return null; //negatif ve NaN
+        final int row = cellRow(x), col = cellCol(z);
+        final float maxD2 = maxRadius * maxRadius;
+        final int maxRing = Math.max(gridRows, gridCols);
+
+        PhysicsEntity best = null;
+        float bestD2 = Float.MAX_VALUE;
+
+        for(int k = 0; k <= maxRing; k++){
+            //k. halkadaki (ve ötesindeki) bir cisim en az (k-1)*gridSize - pay kadar uzaktadır
+            float lower = k * gridSize - gridSize - QUERY_SLACK;
+            if(lower < 0f) lower = 0f;
+            if(lower > maxRadius) break;
+            if(best != null && lower * lower >= bestD2) break;
+
+            final int r0 = row - k, r1 = row + k, c0 = col - k, c1 = col + k;
+            if(r0 < 0 && c0 < 0 && r1 >= gridRows && c1 >= gridCols) break; //halka tamamen saha dışında
+
+            final int rFrom = Math.max(r0, 0), rTo = Math.min(r1, gridRows - 1);
+            for(int r = rFrom; r <= rTo; r++){
+                final boolean edgeRow = (r == r0 || r == r1);
+                if(edgeRow){
+                    final int cFrom = Math.max(c0, 0), cTo = Math.min(c1, gridCols - 1);
+                    for(int c = cFrom; c <= cTo; c++){
+                        List<PhysicsEntity> cell = grids.get(r * gridCols + c);
+                        for(int i = 0; i < cell.size(); i++){
+                            PhysicsEntity e = cell.get(i);
+                            if(!filter.accept(e)) continue;
+                            float dx = e.position.x - x, dz = e.position.z - z;
+                            float d2 = dx * dx + dz * dz;
+                            if(d2 <= maxD2 && d2 < bestD2){ bestD2 = d2; best = e; }
+                        }
+                    }
+                }
+                else{ //yalnızca halkanın sol ve sağ ucu
+                    for(int side = 0; side < 2; side++){
+                        final int c = (side == 0) ? c0 : c1;
+                        if(c < 0 || c >= gridCols) continue;
+                        List<PhysicsEntity> cell = grids.get(r * gridCols + c);
+                        for(int i = 0; i < cell.size(); i++){
+                            PhysicsEntity e = cell.get(i);
+                            if(!filter.accept(e)) continue;
+                            float dx = e.position.x - x, dz = e.position.z - z;
+                            float d2 = dx * dx + dz * dz;
+                            if(d2 <= maxD2 && d2 < bestD2){ bestD2 = d2; best = e; }
+                        }
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    /** (x, z) merkezli, yarıçapı 'radius' olan dairenin içindeki (merkezler arası mesafe <= radius), süzgeçten geçen cisimlerin sayısı.
+     *  Yalnızca daireyi örten ızgara hücrelerine bakar. Top yoğunluğu / küme sorguları için. */
+    public int countNear(float x, float z, float radius, EntityFilter filter){
+        if(!(radius >= 0f)) return 0;
+        final float reach = radius + QUERY_SLACK;
+        final int r0 = cellRow(x - reach), r1 = cellRow(x + reach);
+        final int c0 = cellCol(z - reach), c1 = cellCol(z + reach);
+        final float r2 = radius * radius;
+
+        int count = 0;
+        for(int r = r0; r <= r1; r++){
+            for(int c = c0; c <= c1; c++){
+                List<PhysicsEntity> cell = grids.get(r * gridCols + c);
+                for(int i = 0; i < cell.size(); i++){
+                    PhysicsEntity e = cell.get(i);
+                    if(!filter.accept(e)) continue;
+                    float dx = e.position.x - x, dz = e.position.z - z;
+                    if(dx * dx + dz * dz <= r2) count++;
+                }
+            }
+        }
+        return count;
     }
 
     /**

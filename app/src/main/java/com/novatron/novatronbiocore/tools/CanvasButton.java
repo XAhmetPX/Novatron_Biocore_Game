@@ -153,6 +153,11 @@ public class CanvasButton{
         return false;
     }
 
+    public void reset(){
+        activePointerId = MotionEvent.INVALID_POINTER_ID;
+        isPressed = false;
+    }
+
     public interface OnClickListener{
         void onClick();
     }

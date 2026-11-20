@@ -67,10 +67,10 @@ public class FRCGameRebuilt implements Game{
     public static final float FIELD_DEPTH_METERS = ALLIANCE_ZONE_DEPTH * 2 + NEUTRAL_ZONE_DEPTH; //z ekseni (uzun kenar)
     public static final float FIELD_WIDTH_METERS = (TRENCH_STICK_W + TRENCH_BODY_W + BUMP_W) * 2 + HUB_W;              //x ekseni (kısa kenar)
 
-    //Süreler
+    //süreler
     private static final int TELEOP_TIME = 140 * 60;
     private static final int AUTONOMOUS_TIME = 20 * 60;
-    private static final int AUTONOMOUS_TO_TELEOP_WAIT_TIME = 2 * 60;
+    private static final int AUTONOMOUS_AND_TELEOP_END_WAIT_TIME = (int)(3.5 * 60);
 
     //outpost: toplar robotun ÜSTÜNE dökülür, üst üste binmesinler diye farklı yüksekliklerde doğar
     private static final float OUTPOST_DROP_HEIGHT  = 1.0f;                       //ilk topun tabanı (m)
@@ -83,6 +83,7 @@ public class FRCGameRebuilt implements Game{
     private CanvasButton btnIntake, btnShot;
     final Viewport viewport;
     private State state = State.RUNNING;
+    private boolean ispreloaded = false;
 
     //-----objects-----
     private Physic3D physic;
@@ -91,6 +92,8 @@ public class FRCGameRebuilt implements Game{
     //intake güncellemesi için (tüm cisimleri taramamak için)
     private final java.util.List<RobotRebuilt> robots = new ArrayList<>();
     private FuelBall[] allRedOutpost, allBlueOutpost;
+    //atış planlaması için (RobotRebuilt.canShootFrom): topu durduran sabit engeller (sensör olmayanlar), preloadGame'de bir kez toplanır
+    private Physic3D.Obstacle[] solidObstacles = new Physic3D.Obstacle[0];
     private int redOutpostCount, blueOutpostCount;
     private float redOutpostCounter, blueOutpostCounter;
 
@@ -180,7 +183,7 @@ public class FRCGameRebuilt implements Game{
         if(joystick == null || degreeStick == null || btnIntake == null || btnShot == null) return;
         if(physic == null) return;
 
-        if(!inAutonomous && playerRobot != null){
+        if(!inAutonomous && playerRobot != null && time > 0){
             //ekranda yukarı = +x, sağa = +z
             float inputX = (float)-joystick.getValueY();
             float inputZ = (float)joystick.getValueX();
@@ -200,7 +203,8 @@ public class FRCGameRebuilt implements Game{
 
         redOutpostCounter = Math.max(0, redOutpostCounter - DT);
         blueOutpostCounter = Math.max(0, blueOutpostCounter - DT);
-        float distance = (RobotRebuilt.ROBOT_SIZE/2f + 0.10f);
+        //top dökülmesi için robotun köşelere göre maks uzaklığı
+        float distance = (RobotRebuilt.ROBOT_SIZE/2f + 0.50f);
         //outpostlar altlarında takım robotu varsa top döker
         for(RobotRebuilt robot : robots){
             if(robot.getIntakeCapacity() == robot.getIntakeCount()) continue; //deposu dolu
@@ -208,7 +212,8 @@ public class FRCGameRebuilt implements Game{
             //mavi outpost için kontrol
             if(robot.isBlueAlliance){
                 if(blueOutpostCounter > 0) continue; //tüm topları birden bırakmasın diye biraz bekle
-                if(!(robot.position.z >= FIELD_DEPTH_METERS - distance && robot.position.x >= FIELD_WIDTH_METERS - distance))
+                if(!(robot.position.z >= FIELD_DEPTH_METERS - distance &&
+                        robot.position.x >= FIELD_WIDTH_METERS - distance))
                     continue; //depoya yeterince yakın değilse atla
 
                 //en az 1 top düşmeli
@@ -231,33 +236,38 @@ public class FRCGameRebuilt implements Game{
         for(int i = 0; i < robots.size(); i++)
             robots.get(i).updateIntake();
 
+        playSoundEffect();
         time--;
         if(inAutonomous){
             if(time == 59){ //otonom bitti
                 //robot girdilerinin hemen sıfırla
-                for (RobotRebuilt robot : robots)
+                for(RobotRebuilt robot : robots)
                     robot.stopAutonomous();
             }
         }
         else{
-            if(time == 30 * 60) //end game'e geçiş
-                gp.vibration.vibrateOneShot(500, 210);
+            if(time == 0){
+                //robot girdilerinin hemen sıfırla
+                for(RobotRebuilt robot : robots)
+                    robot.stopAutonomous();
+            }
         }
         if(time <= 0){
             if(inAutonomous){
-                if(time <= -AUTONOMOUS_TO_TELEOP_WAIT_TIME){
+                if(time <= -AUTONOMOUS_AND_TELEOP_END_WAIT_TIME){
                     //otonomdan teleopa geç
                     time = TELEOP_TIME;
                     inAutonomous = false;
                 }
-                else if(time == -(AUTONOMOUS_TO_TELEOP_WAIT_TIME - 60)){
+                else if(time == -(AUTONOMOUS_AND_TELEOP_END_WAIT_TIME - 60)){
                     gp.vibration.vibrateOneShot(500, 210);
                 }
             }
             else{
-                //oyun bitti
-                time = 0;
-                state = State.GAME_OVER;
+                if(time <= - AUTONOMOUS_AND_TELEOP_END_WAIT_TIME){
+                    //oyun bitti
+                    state = State.GAME_OVER;
+                }
             }
         }
     }
@@ -273,6 +283,29 @@ public class FRCGameRebuilt implements Game{
             float y = OUTPOST_DROP_HEIGHT + i * OUTPOST_DROP_SPACING;
             ball.respawn(x, y, z, 0f, 0f, 0f);
             physic.addEntity(ball);
+        }
+    }
+    /** Mevcut zamana göre ses efekti oynatır */
+    private void playSoundEffect(){
+        if(inAutonomous){
+            switch(time){
+                case 20 * 60: gp.audioSystem.playSound(R.raw.frc_game_match_start); break;
+                case 0: gp.audioSystem.playSound(R.raw.frc_game_end); break;
+            }
+        }
+        else{
+            switch(time){
+                case TELEOP_TIME: gp.audioSystem.playSound(R.raw.frc_game_teleop_start); break;
+
+                case 130 * 60:
+                case (int)(106.5 * 60):
+                case (int)(81.5 * 60):
+                case 56 * 60:
+                    gp.audioSystem.playSound(R.raw.frc_game_hub_change); break;
+
+                case 31 * 60: gp.audioSystem.playSound(R.raw.frc_game_end_game); break;
+                case 60: gp.audioSystem.playSound(R.raw.frc_game_end); break;
+            }
         }
     }
 
@@ -346,7 +379,7 @@ public class FRCGameRebuilt implements Game{
         //ortadaki sayaç
         textX = centerX - timeWidth/2f;
         textY = centerY + (float)(px * 5);
-        int tempTime = ((inAutonomous) ? ((time < 60) ? TELEOP_TIME : time) : time) / 60;
+        int tempTime = Math.max((inAutonomous) ? ((time < 60) ? TELEOP_TIME : time) : time, 0) / 60;
         text = String.format(Locale.US, "%01d:%02d", tempTime/60, tempTime % 60);
         canvas.drawText(text, textX, textY, indicatorTimePaint);
 
@@ -366,64 +399,15 @@ public class FRCGameRebuilt implements Game{
         if(inAutonomous) return;
 
         //teleop periyotu
-        text = String.format(Locale.US, "%01d/%01d",getCurrentPeriod(time), 6);
+        text = String.format(Locale.US, "%01d/%01d",getCurrentPeriod(), 6);
         textY = centerY + (float)(px * 14.5);
         textX = centerX - (float)(px * 3.65) - teleopWidth/2f;
         canvas.drawText(text, textX, textY, indicatorTeleopPaint);
 
         //teleop periyotu kalan süre
-        text = String.format(Locale.US, "%02d", getRemainingTimeInPeriod(time));
+        text = String.format(Locale.US, "%02d", getRemainingTimeInPeriod());
         textX = centerX + (float)(px * 10.5) - teleopTimeWidth/2f;
         canvas.drawText(text, textX, textY, indicatorTeleopTimePaint);
-    }
-
-    /** mevcut periyotun numarasını döndürür */
-    public static int getCurrentPeriod(int time){
-        if(time < 31 * 60){ return 6; }
-        if(time < 51 * 60){ return 5; }
-        if(time < 81 * 60){ return 4; }
-        if(time < 106 * 60){ return 3; }
-        if(time < 131 * 60){ return 2; }
-        if(time < 141 * 60){ return 1; }
-        else return -1;
-    }
-    /** saniye cinsinden diğer periyota kalan süreyi döndürür */
-    private int getRemainingTimeInPeriod(int time){
-        int remainingTicks;
-
-        if(time <= 31 * 60){
-            //Periyot 6 (Endgame): 30. saniyeden 0'a doğru kalan süre doğrudan time kadardır
-            remainingTicks = time;
-        }
-        else if(time <= 55 * 60){
-            //Periyot 5: 55. saniyeden 30. saniyeye kalan süre
-            remainingTicks = time - (30 * 60);
-        }
-        else if(time <= 81 * 60){
-            //Periyot 4: 80. saniyeden 55. saniyeye kalan süre
-            remainingTicks = time - (55 * 60);
-        }
-        else if(time <= 106 * 60){
-            //Periyot 3: 105. saniyeden 80. saniyeye kalan süre
-            remainingTicks = time - (80 * 60);
-        }
-        else if(time < 131 * 60){
-            //Periyot 2: 130. saniyeden 105. saniyeye kalan süre
-            remainingTicks = time - (105 * 60);
-        }
-        else if(time < 141 * 60){
-            //Periyot 1: 140. saniyeden 130. saniyeye kalan süre
-            remainingTicks = time - (130 * 60);
-        }
-        else{
-            remainingTicks = 0;
-        }
-
-        if(remainingTicks < 0)
-            remainingTicks = 0;
-
-        //Tick değerini saniyeye çevirip döndürür
-        return remainingTicks / 60;
     }
 
     @Override
@@ -445,6 +429,7 @@ public class FRCGameRebuilt implements Game{
 
     @Override
     public void preloadGame(){
+        if(ispreloaded) return;
         physic = new Physic3D(FIELD_WIDTH_METERS, FIELD_DEPTH_METERS); //(x ölçüsü, z ölçüsü)
 
         final float RED_ALLIANCE_Z = ALLIANCE_ZONE_DEPTH - RobotRebuilt.ROBOT_SIZE / 2f;
@@ -490,6 +475,7 @@ public class FRCGameRebuilt implements Game{
 
         //---------------------------------------ENGELLER---------------------------------------
         setObstacles();
+        collectSolidObstacles();
 
         //-------------------------------JOYSTICK VE DEGREE_STICK-------------------------------
         if(Configs.IS_USE_FLOATING_VIEWS){
@@ -543,10 +529,18 @@ public class FRCGameRebuilt implements Game{
 
         gp.imageStore.preloadImage(R.drawable.frc_game_counter);
         gp.imageStore.preloadImage(R.drawable.frc_game_counter_autonomous);
+
+        gp.audioSystem.loadSound(R.raw.frc_game_end);
+        gp.audioSystem.loadSound(R.raw.frc_game_end_game);
+        gp.audioSystem.loadSound(R.raw.frc_game_hub_change);
+        gp.audioSystem.loadSound(R.raw.frc_game_match_start);
+        gp.audioSystem.loadSound(R.raw.frc_game_teleop_start);
+
+        ispreloaded = true;
     }
     private void setObstacles(){
 
-        final float RED_OBSTACLES_CENTER_Z = ALLIANCE_ZONE_DEPTH + HUB_D/2f;
+        final float RED_OBSTACLES_CENTER_Z = getHubCenterZ(false);
         //-------------------KIRMIZI-------------------
         //merkez
         addHub(RED_OBSTACLES_CENTER_Z, false);
@@ -561,10 +555,10 @@ public class FRCGameRebuilt implements Game{
         //kule
         addTower(true);
         //kule filesi
-        addTent(RED_OBSTACLES_CENTER_Z + 0.8919f);
+        addNet(RED_OBSTACLES_CENTER_Z + 0.8919f);
 
 
-        final float BLUE_OBSTACLES_CENTER_Z = FIELD_DEPTH_METERS - (ALLIANCE_ZONE_DEPTH + HUB_D/2f);
+        final float BLUE_OBSTACLES_CENTER_Z = getHubCenterZ(true);
         //---------------------MAVİ--------------------
         //merkez
         addHub(BLUE_OBSTACLES_CENTER_Z, true);
@@ -579,7 +573,14 @@ public class FRCGameRebuilt implements Game{
         //kule
         addTower(false);
         //kule filesi
-        addTent(BLUE_OBSTACLES_CENTER_Z - 0.8919f);
+        addNet(BLUE_OBSTACLES_CENTER_Z - 0.8919f);
+    }
+    /** Atış yolunu kesebilecek sabit engelleri (sensör olmayan Obstacle'lar: hub, hendek, kule, file) toplar. */
+    private void collectSolidObstacles(){
+        ArrayList<Physic3D.Obstacle> list = new ArrayList<>();
+        for(Physic3D.PhysicsEntity e : physic.entities)
+            if(e instanceof Physic3D.Obstacle && !e.isSensor) list.add((Physic3D.Obstacle) e);
+        solidObstacles = list.toArray(new Physic3D.Obstacle[0]);
     }
     private void addHub(float startZ, boolean isBlueHub){
         physic.addEntity(new Physic3D.Obstacle(
@@ -664,7 +665,7 @@ public class FRCGameRebuilt implements Game{
                 TOWER_W, TOWER_H, TOWER_D, viewport, gp.ui.fontDebug
         ));
     }
-    private void addTent(float startZ){
+    private void addNet(float startZ){
         physic.addEntity(new Physic3D.Obstacle(
                 FIELD_WIDTH_METERS/2f, HUB_H, startZ, 0,
                 1.4419f, 1.6299f, 0.05f, viewport, gp.ui.fontDebug){
@@ -700,29 +701,117 @@ public class FRCGameRebuilt implements Game{
                 centerZ - ((rows - 1) * BALL_SPACING) / 2f, cols, rows);
     }
 
+    /** mevcut periyotun numarasını döndürür */
+    public int getCurrentPeriod(){ return periodAt(time); }
+    /** 'tick' anındaki (time değeri gibi, geriye sayan) periyot numarası */
+    private static int periodAt(int tick){
+        if(tick < 31 * 60){ return 6; }
+        if(tick < 56 * 60){ return 5; }
+        if(tick < 81 * 60){ return 4; }
+        if(tick < 106 * 60){ return 3; }
+        if(tick < 131 * 60){ return 2; }
+        if(tick < 141 * 60){ return 1; }
+        else return -1;
+    }
+    /** saniye cinsinden diğer periyota kalan süreyi döndürür */
+    public int getRemainingTimeInPeriod(){
+        int remainingTicks;
+
+        if(time <= 31 * 60){
+            //Periyot 6 (Endgame): 30. saniyeden 0'a doğru kalan süre doğrudan time kadardır
+            remainingTicks = time;
+        }
+        else if(time <= 55 * 60){
+            //Periyot 5: 55. saniyeden 30. saniyeye kalan süre
+            remainingTicks = time - (30 * 60);
+        }
+        else if(time <= 81 * 60){
+            //Periyot 4: 80. saniyeden 55. saniyeye kalan süre
+            remainingTicks = time - (55 * 60);
+        }
+        else if(time <= 106 * 60){
+            //Periyot 3: 105. saniyeden 80. saniyeye kalan süre
+            remainingTicks = time - (80 * 60);
+        }
+        else if(time < 131 * 60){
+            //Periyot 2: 130. saniyeden 105. saniyeye kalan süre
+            remainingTicks = time - (105 * 60);
+        }
+        else if(time < 141 * 60){
+            //Periyot 1: 140. saniyeden 130. saniyeye kalan süre
+            remainingTicks = time - (130 * 60);
+        }
+        else{
+            remainingTicks = 0;
+        }
+
+        if(remainingTicks < 0)
+            remainingTicks = 0;
+
+        //Tick değerini saniyeye çevirip döndürür
+        return remainingTicks / 60;
+    }
+    public int getRedOutpostBallCount(){ return redOutpostCount; }
+    public int getBlueOutpostBallCount(){ return blueOutpostCount; }
     public boolean isRedOutpostEmpty(){ return redOutpostCount == 0; }
     public boolean isBlueOutpostEmpty(){ return blueOutpostCount == 0; }
     public boolean isRedHubActive(){
-        if(inAutonomous) return true;
         if(time < 0) return false; //otonomdan teleop'a geçiş beklemesi
-        switch(getCurrentPeriod(time)){
-            case 1: case 2:
-            case 4: case 6:
+        if(inAutonomous) return true;
+        return isHubActiveInPeriod(false, getCurrentPeriod());
+    }
+    public boolean isBlueHubActive(){
+        if(time < 0) return false;
+        if(inAutonomous) return true;
+        return isHubActiveInPeriod(true, getCurrentPeriod());
+    }
+    /** Teleop'ta verilen periyotta hub aktif mi? (kırmızı: 1, 2, 4, 6 - mavi: 1, 3, 5, 6) */
+    private static boolean isHubActiveInPeriod(boolean blue, int period){
+        switch(period){
+            case 1: case 6:
                 return true;
+            case 2: case 4:
+                return !blue;
+            case 3: case 5:
+                return blue;
 
             default: return false;
         }
     }
-    public boolean isBlueHubActive(){
-        if(inAutonomous) return true;
-        if(time < 0) return false;
-        switch(getCurrentPeriod(time)){
-            case 1: case 3:
-            case 5: case 6:
-                return true;
+    public boolean isHubActive(boolean blue){ return (blue) ? isBlueHubActive() : isRedHubActive(); }
 
-            default: return false;
-        }
+    /** Hub şu an aktifse 0, değilse aktif olmasına kalan süre (saniye); bir daha aktif olmayacaksa +sonsuz.
+     *  (Teleop periyot tablosuna bakar, ticklere göre taranır: sık çağrı için ucuzdur ama bedava değildir.) */
+    public float getSecondsUntilHubActive(boolean blue){
+        if(isHubActive(blue)) return 0f;
+        if(inAutonomous) return (AUTONOMOUS_AND_TELEOP_END_WAIT_TIME + time) / 60f; //geçiş beklemesi (time < 0); teleop'un ilk periyodunda iki hub da aktif
+        for(int t = time - 1; t >= 0; t--)
+            if(isHubActiveInPeriod(blue, periodAt(t))) return (time - t) / 60f;
+        return Float.POSITIVE_INFINITY;
+    }
+    /** Hub şu an aktifse bu aktif aralığın bitmesine kalan süre (saniye, oyun biterse oyun sonuna kadar); aktif değilse 0.
+     *  Atışın uçuş süresini hesaba katmak için: top inene kadar hub kapanırsa puan yazmaz. */
+    public float getSecondsHubActiveRemaining(boolean blue){
+        if(!isHubActive(blue)) return 0f;
+        if(inAutonomous) return time / 60f; //otonom bitince (time < 0) geçiş beklemesinde hub kapanır
+        for(int t = time - 1; t >= 0; t--)
+            if(!isHubActiveInPeriod(blue, periodAt(t))) return (time - t) / 60f;
+        return time / 60f;
+    }
+    public int getBlueAllianceScore(){ return blueAllianceScore; }
+    public int getRedAllianceScore(){ return redAllianceScore; }
+    /** gerçek saniyeyi döndürür (yani 60'a bölünmemiş halini) */
+    public int getRealTime(){ return time; }
+    public java.util.List<RobotRebuilt> getRobots(){ return robots; }
+    /** true: otonom periyodu (ya da otonomdan teleop'a geçiş beklemesi) sürüyor. Botların beyni teleop başlayana kadar çalışmaz. */
+    public boolean isInAutonomous(){ return inAutonomous; }
+    /** Fizik dünyası: botlar yalnızca SORGU için kullanmalı (cisim ekleyip silme, konum değiştirme yok). */
+    public Physic3D getPhysic(){ return physic; }
+    /** Hub merkezinin x konumu (iki hub de sahanın x ortasında) */
+    public static float getHubCenterX(){ return FIELD_WIDTH_METERS / 2f; }
+    /** Hub merkezinin z konumu (mavi: büyük z tarafı, kırmızı: küçük z tarafı) */
+    public static float getHubCenterZ(boolean blue){
+        return (blue) ? FIELD_DEPTH_METERS - (ALLIANCE_ZONE_DEPTH + HUB_D/2f) : ALLIANCE_ZONE_DEPTH + HUB_D/2f;
     }
 
     @Override
@@ -730,6 +819,7 @@ public class FRCGameRebuilt implements Game{
         if(physic != null)
             physic.entities.clear();
         physic = null;
+        solidObstacles = new Physic3D.Obstacle[0];
         robots.clear();
         playerRobot = null;
         java.util.Arrays.fill(allRedOutpost, null);
@@ -744,6 +834,8 @@ public class FRCGameRebuilt implements Game{
         indicatorTimePaint = null;
         gp.imageStore.removeImage(R.drawable.frc_game_counter);
         gp.imageStore.removeImage(R.drawable.frc_game_counter_autonomous);
+        gp.audioSystem.release();
+        ispreloaded = false;
     }
     @Override
     public void reset(){
@@ -752,6 +844,8 @@ public class FRCGameRebuilt implements Game{
         physic.resetAll();
         joystick.reset();
         degreeStick.reset();
+        btnIntake.reset();
+        btnShot.reset();
         intakeOn = false;
         shootOn = false;
         updateIntakeLabel();
@@ -865,7 +959,10 @@ public class FRCGameRebuilt implements Game{
 
         @Override
         public void update(float dt){
-            if(brain != null) brain.update(this, dt);
+            //beyin teleop başlayana kadar çalışmaz: otonomda robotun otonom kuyruğunu bozmasın, otonomdan teleop'a geçiş
+            //beklemesinde (stopAutonomous sonrası, inAutonomous hâlâ true) botlar oyuncudan önce hareket etmesin
+            if(brain != null && !game.isInAutonomous() && game.getRealTime() > 0)
+                brain.update(this, dt);
             super.update(dt);
         }
 
@@ -929,6 +1026,9 @@ public class FRCGameRebuilt implements Game{
          *  Rastgelelik dünyanın seed'li random'ından gelir (deterministik). */
         public float shootAngleSigma = (float)Math.toRadians(0.5f);
         public float shootSpeedSigma = 0.01f; //menzil ~ hız², yani %1 hız hatası ~%2 menzil hatası
+        /** canShootFrom'un engel testinde topun yarıçapına eklenen yatay güvenlik payı (m): atış hatası (sapma) yüzünden
+         *  bir engelin (ağın kenarı, hub'ın kenarı) hemen yanından geçen sınırda atışlar "olur" sayılmasın. 0 = tam sınır. */
+        public float shotClearance = 0.05f;
 
         private static final float SHOT_MIN_TIME  = 0.05f; //uçuş süresi taraması (s)
         private static final float SHOT_MAX_TIME  = 3.0f;
@@ -955,27 +1055,32 @@ public class FRCGameRebuilt implements Game{
          * @return false: ulaşılamaz (çok uzak/yüksek, çok yakın, namlu hızı yetmez)
          */
         private boolean solveShot(float dx, float dy, float dz){
+            return solveShot(dx, dy, dz, velocity.x, velocity.z);
+        }
+
+        /** solveShot'un robot hızı verilebilen hâli (canShootFrom hipotetik konumda hızı 0 alır). */
+        private boolean solveShot(float dx, float dy, float dz, float rvx, float rvz){
             final float cos = (float)Math.cos(shooterAngle), tan = (float)Math.tan(shooterAngle);
 
             boolean found = false;
             float bestSpeed = Float.MAX_VALUE;
 
             float prevT = SHOT_MIN_TIME;
-            float prevF = shotError(dx, dy, dz, prevT, tan);
+            float prevF = shotError(dx, dy, dz, prevT, tan, rvx, rvz);
             for(float t = SHOT_MIN_TIME + SHOT_SCAN_STEP; t <= SHOT_MAX_TIME + 1e-4f; t += SHOT_SCAN_STEP){
-                float f = shotError(dx, dy, dz, t, tan);
+                float f = shotError(dx, dy, dz, t, tan, rvx, rvz);
 
                 if(prevF > 0f && f <= 0f){ //kök top hedef yüksekliğini bu aralıta geçiyor
                     float lo = prevT, hi = t;
 
                     for(int i = 0; i < 24; i++){
                         float mid = (lo + hi) * 0.5f;
-                        if(shotError(dx, dy, dz, mid, tan) > 0f) lo = mid;
+                        if(shotError(dx, dy, dz, mid, tan, rvx, rvz) > 0f) lo = mid;
                         else hi = mid;
                     }
                     final float T = (lo + hi) * 0.5f;
 
-                    float ex = dx - velocity.x * T, ez = dz - velocity.z * T;
+                    float ex = dx - rvx * T, ez = dz - rvz * T;
                     float w = (float) Math.sqrt(ex * ex + ez * ez) / T; //robota göre yatay hız
                     float vy = w * tan;
                     float speed = w / cos;                              //robota göre toplam namlu hızı
@@ -994,8 +1099,8 @@ public class FRCGameRebuilt implements Game{
         }
 
         /** T anında topun hedef yüksekliğine göre yüksekliği (sıfır = hedefte). Bkz. solveShot. */
-        private float shotError(float dx, float dy, float dz, float t, float tan){
-            float ex = dx - velocity.x * t, ez = dz - velocity.z * t;
+        private float shotError(float dx, float dy, float dz, float t, float tan, float rvx, float rvz){
+            float ex = dx - rvx * t, ez = dz - rvz * t;
             return tan * (float) Math.sqrt(ex * ex + ez * ez)
                     - 0.5f * Physic3D.GRAVITY * (t * t + DT * t) - dy;
         }
@@ -1011,6 +1116,60 @@ public class FRCGameRebuilt implements Game{
                 if(Math.abs(getHeadingError(targetAngle)) > SHOT_MAX_ANGLE_ERR) return false;
             }
             return solveShot(dx, targetY - (position.y + shooterHeight), dz);
+        }
+
+        /**
+         * PLANLAMA sorgusu (bot beyni için): robot (fromX, fromZ)'de zeminde DURURKEN hedefe atış yaparsa top hedefe ulaşır mı?
+         * Menzil, namlu hızı, hedefe inerek varma koşulu (canShoot ile aynı hesap) VE atış yolunun üzerindeki sabit engeller
+         * (file/ağ, kule, hendek...) dikkate alınır: top yolda bir engele çarparsa false. Bekleme süresi, mermi sayısı ve
+         * robotun şu anki yönü dikkate ALINMAZ (beyin oraya gidip hedefe döner). Robotun/topun durumunu değiştirmez.
+         * Not: gerçek atış (shoot) engele çarpmayı fizikte yaşar; bu sorgu sadece atışa gitmeden önce bilmek içindir.
+         */
+        public boolean canShootFrom(float fromX, float fromZ, float targetX, float targetY, float targetZ){
+            final float muzzleY = shooterHeight; //robot zeminde: namlunun (topun tabanı) yüksekliği
+            if(!solveShot(targetX - fromX, targetY - muzzleY, targetZ - fromZ, 0f, 0f)) return false;
+            return !isShotObstructed(fromX, muzzleY, fromZ, shotVelocity.x, shotVelocity.y, shotVelocity.z, targetY);
+        }
+
+        /** canShootFrom'un kendi ittifakının hub'ına (hub'ın tepesinin ortası) puan atışı hâli. */
+        public boolean canScoreFrom(float fromX, float fromZ){
+            return canShootFrom(fromX, fromZ, getHubCenterX(), HUB_H, getHubCenterZ(isBlueAlliance));
+        }
+
+        /**
+         * Top (x0, y0, z0)'dan v hızıyla çıkıp hedef yüksekliğine (targetY) İNENE kadar sabit bir engele çarpar mı?
+         * Fizikle aynı adımda ve sırada simüle edilir (DT, yatay konum, sonra yarı-örtük Euler dikey). Engel testi
+         * topun yarıçapı + shotClearance kadar yatayda şişirilmiş dikdörtgenle yapılır (top hitbox'ı sekizgen, bu hafif
+         * muhafazakâr). Yükseklik aralığı aynen alınır: hedefin tam üstünden inen top hub'ın üstünü engel saymaz.
+         */
+        private boolean isShotObstructed(float x0, float y0, float z0, float vx, float vy, float vz, float targetY){
+            final float R = FuelBall.RADIUS, ballHeight = R * 2f, reach = R + shotClearance;
+            float x = x0, y = y0, z = z0;
+            final int maxSteps = (int)((SHOT_MAX_TIME + 1f) / DT);
+
+            for(int step = 0; step < maxSteps; step++){
+                x += vx * DT;
+                z += vz * DT;
+                vy -= Physic3D.GRAVITY * DT;
+                y += vy * DT;
+
+                if(vy < 0f && y <= targetY) return false; //hedef yüksekliğine ulaştı
+
+                for(int i = 0; i < solidObstacles.length; i++){
+                    final Physic3D.Obstacle o = solidObstacles[i];
+                    if(y >= o.position.y + o.height || y + ballHeight <= o.position.y) continue; //y aralıkları örtüşmüyor
+
+                    float lx = x - o.position.x, lz = z - o.position.z;
+                    if(o.startHeading != 0f){ //dönük engel: topu engelin eksenlerine çevir (heading değişmez, startHeading = heading)
+                        float c = (float)Math.cos(o.startHeading), sn = (float)Math.sin(o.startHeading);
+                        float rx = lx * c + lz * sn, rz = -lx * sn + lz * c;
+                        lx = rx;
+                        lz = rz;
+                    }
+                    if(Math.abs(lx) < o.width / 2f + reach && Math.abs(lz) < o.depth / 2f + reach) return true;
+                }
+            }
+            return false;
         }
 
         @Override

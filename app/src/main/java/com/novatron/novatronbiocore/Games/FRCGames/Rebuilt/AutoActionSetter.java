@@ -126,7 +126,7 @@ public final class AutoActionSetter{
                 new AutoActions.DriveToPosition(5.95f, 6.90f, 2f, false)
         ));
         //geri git
-        actions.addAutoTask(new AutoActions.DriveBezierCurve(2.5f, true,
+        actions.addAutoTask(new AutoActions.DriveBezierCurve(2.5f, false,
                 4.10f, 6.85f,
                 2.50f, 6.20f,
                 2.40f, 4.00f,

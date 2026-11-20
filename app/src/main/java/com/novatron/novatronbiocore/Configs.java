@@ -11,4 +11,7 @@ public final class Configs{
     public static boolean IS_USE_FLOATING_VIEWS = false;
     public static boolean USE_VIBRATION = true;
     public static boolean DEBUG = false;
+
+    public static boolean USE_SOUND_EFFECT = true;
+    public static boolean USE_MUSIC = true;
 }

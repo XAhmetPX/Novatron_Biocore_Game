@@ -7,7 +7,7 @@ import android.media.SoundPool;
 import java.util.HashMap;
 
 public class AudioSystem{
-    private Context context;
+    private final Context context;
 
     //müzik (mediaPlayer)
     private MediaPlayer mediaPlayer;
@@ -17,7 +17,7 @@ public class AudioSystem{
 
     //ses efektleri (soundPool)
     private SoundPool soundPool;
-    private HashMap<Integer, Integer> soundMap;
+    private final HashMap<Integer, Integer> soundMap;
     private float sfxVolume = 1.0f;
 
     public AudioSystem(Context context){
@@ -45,7 +45,7 @@ public class AudioSystem{
     //belirli bir sayıda döndürmek için (times = istenilen tekrar sayısı)
     public void loop(Integer musicResId, int times){
         stopMusic(); //varsa çalan müziği durdur
-
+        if(!com.novatron.novatronbiocore.Configs.USE_MUSIC) return;
         if(musicResId == null) return;
 
         targetLoopCount = times;
@@ -97,7 +97,8 @@ public class AudioSystem{
     //yüklenen ses efektini oynatır
     public void playSound(int sfxResId){
         if(!soundMap.containsKey(sfxResId)) return;
-        int soundId = soundMap.get(sfxResId);
+        if(!com.novatron.novatronbiocore.Configs.USE_SOUND_EFFECT) return;
+        int soundId = java.util.Objects.requireNonNull(soundMap.get(sfxResId));
         soundPool.play(soundId, sfxVolume, sfxVolume, 1, 0, 1.0f);
     }
 
