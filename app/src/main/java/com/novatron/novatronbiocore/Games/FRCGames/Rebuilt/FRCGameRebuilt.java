@@ -8,6 +8,7 @@ import android.view.MotionEvent;
 import com.novatron.novatronbiocore.Configs;
 import com.novatron.novatronbiocore.GamePanel;
 import com.novatron.novatronbiocore.Games.FRCGames.AutoActions;
+import com.novatron.novatronbiocore.Games.FRCGames.Rebuilt.Brains.RobotBrain;
 import com.novatron.novatronbiocore.Games.Game;
 import com.novatron.novatronbiocore.R;
 import com.novatron.novatronbiocore.tools.CanvasButton;
@@ -846,6 +847,7 @@ public class FRCGameRebuilt implements Game{
         public final boolean shouldTurnTarget;
 
         public final FRCGameRebuilt game = FRCGameRebuilt.this;
+        public RobotBrain brain;
 
         public RobotRebuilt(float startX, float startY, float startZ, float startHeading, float robotHeight, int intakeCapacity, boolean isBlueAlliance,
                             float shooterDelay, float shooterAngle, float shooterHeight, boolean shouldTurnToTarget){
@@ -859,6 +861,18 @@ public class FRCGameRebuilt implements Game{
             FuelBall ball = (FuelBall) landed;
             for(int i = 0; i < landedOnTop.size(); i++) if(landedOnTop.get(i) == ball) return;
             landedOnTop.add(ball);
+        }
+
+        @Override
+        public void update(float dt){
+            if(brain != null) brain.update(this, dt);
+            super.update(dt);
+        }
+
+        @Override
+        public void stopAutonomous(){
+            super.stopAutonomous();
+            if(brain != null) brain.reset(this);
         }
 
         @Override
@@ -894,15 +908,12 @@ public class FRCGameRebuilt implements Game{
 
         @Override
         public float getFuelHalfSize(){ return FuelBall.RADIUS; }
-
         @Override
         public boolean isPlayerRobot(){ return playerRobot == this; }
-
         @Override
         protected Viewport getViewport(){ return viewport; }
         @Override
         protected GamePanel getGamePanel(){ return gp; }
-
         @Override
         public RobotRebuilt setAutoScript(AutoActions.Script autoScript){
             super.setAutoScript(autoScript); return this;

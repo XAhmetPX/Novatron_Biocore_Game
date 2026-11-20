@@ -1,6 +1,7 @@
-package com.novatron.novatronbiocore.Games.FRCGames;
+package com.novatron.novatronbiocore.Games.FRCGames.Rebuilt.Brains;
 
 import java.util.Random;
+import com.novatron.novatronbiocore.Games.FRCGames.Rebuilt.FRCGameRebuilt.RobotRebuilt;
 
 /**
  * Botların teleop'taki karar vericisi.
@@ -32,18 +33,18 @@ public abstract class RobotBrain{
 
     /** Yeni bir niyet seç ve robot.getActions().addAutoTask(...) ile kuyruğa ekle.
      * Çağrılmadan önce kuyruk temizlenmiş olur, yani sıfırdan karar verilir. */
-    protected abstract void decide(Physic3D.Robot robot);
+    protected abstract void decide(RobotRebuilt robot);
 
     /** İsteğe bağlı: her karede çağrılır. Kesinti tetikleyicilerini (hedef alındı, sıkıştı...) burada kontrol et. */
-    protected void onUpdate(Physic3D.Robot robot, float dt){}
+    protected void onUpdate(RobotRebuilt robot, float dt){}
 
     /** İsteğe bağlı: maç/teleop başında çağrılır. Alt sınıf kendi durumunu sıfırlar. */
-    protected void onReset(Physic3D.Robot robot){}
+    protected void onReset(RobotRebuilt robot){}
 
     // ---------------------------------------------------------------- Robotun çağıracakları
 
     /** Robot.update içinden, sadece bot (oyuncu olmayan) ve otonom bitmişken çağrılır. */
-    public final void update(Physic3D.Robot robot, float dt){
+    public final void update(RobotRebuilt robot, float dt){
         onUpdate(robot, dt);
 
         if(reacting){
@@ -68,7 +69,7 @@ public abstract class RobotBrain{
     }
 
     /** Teleop başlarken çağır. */
-    public final void reset(Physic3D.Robot robot){
+    public final void reset(RobotRebuilt robot){
         decisionTimer = 0f;
         reactionTimer = 0f;
         reacting = false;

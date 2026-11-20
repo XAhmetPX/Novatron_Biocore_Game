@@ -1104,7 +1104,6 @@ public class Physic3D{
         //KONTROL GİRDİLERİ
         protected float inputX, inputZ;
         protected float targetHeading = Float.NaN;
-        private RobotBrain brain; //teleop esnasında karar veren mekanizma
 
         //INTAKE
         /** Intake algılama kutusu: robotla birlikte hareket eder ve döner. Çarpışmaya katılmaz. */
@@ -1224,7 +1223,6 @@ public class Physic3D{
             intakeActive = false;
             setInputs(0, 0, NO_TURN);
             isAutonomous = false;
-            if(brain != null) brain.reset(this);
         }
 
         @Override
@@ -1238,8 +1236,6 @@ public class Physic3D{
         /** @param dt geçen süre (60 TPS için dt = 1/60f ≈ 0.0166s) */
         @Override
         public void update(float dt){
-
-            if(brain != null) brain.update(this, dt);
 
             //otonomda veya bot ise otonom aksiyonları çalıştır
             if(isAutonomous || !isPlayerRobot()){
