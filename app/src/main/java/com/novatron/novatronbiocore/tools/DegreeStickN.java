@@ -17,7 +17,6 @@ public class DegreeStickN{
     private int paddingLeft=50, paddingTop=50, paddingRight=50, paddingBottom=50;
     private int screenWidth, screenHeight;
     protected float centerX, centerY;
-    private double value;
 
     protected boolean isDragging = false;
     protected int pointerID = -1;
@@ -88,7 +87,6 @@ public class DegreeStickN{
         }
 
         if(isDragging) return;
-        value = 0.0;
         radian = (float)Math.PI/2;
     }
 
@@ -142,7 +140,6 @@ public class DegreeStickN{
                     pointerID = -1;
 
                     radian = (float)Math.PI/2;
-                    value = 0.0f;
                     return true;
                 }
                 return false;
@@ -159,7 +156,6 @@ public class DegreeStickN{
         double rawDegree = 90.0 - Math.toDegrees(rawRadian);
         if(rawDegree > 180) rawDegree -= 360;
 
-        value = rawDegree / 180.0;
         radian = (float) Math.toRadians(90.0 - rawDegree);
     }
 
@@ -167,8 +163,8 @@ public class DegreeStickN{
     public double getDegree(){ return (pointerID != -1) ? Math.toDegrees(radian) : Float.NaN; }
     public double getRadian(){ return (pointerID != -1) ? radian : Float.NaN; }
     public void reset(){
-        value = 0.0;
         radian = (float)Math.PI/2;
         pointerID = -1;
+        isDragging = false;
     }
 }
