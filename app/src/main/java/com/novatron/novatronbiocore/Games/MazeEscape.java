@@ -200,9 +200,13 @@ public class MazeEscape implements Game{
         for(Entity e : entities) e.draw(canvas);
 
         //----------------------------------------ÖDÜL----------------------------------------
-        gp.imageStore.drawScaledPixelImage(canvas, R.drawable.maze_award_medallion,
-                gp.SCREEN_WIDTH/2f  - (player.x + MAZE_W - 1 - (int)Math.floor(player.x) * 2) * ts,
-                gp.SCREEN_HEIGHT/2f - (player.y + MAZE_H - 1 - (int)Math.floor(player.y) * 2) * ts, ts, ts);
+        final int ctx = (int)Math.floor(player.x);
+        final int cty = (int)Math.floor(player.y);
+        int dx = MAZE_W - 1 - ctx;
+        int dy = MAZE_H - 1 - cty;
+        float drawX = (gp.SCREEN_WIDTH/2f - (player.x - ctx) * ts) + dx * ts;
+        float drawY = (gp.SCREEN_HEIGHT/2f - (player.y - cty) * ts) + dy * ts;
+        gp.imageStore.drawScaledPixelImage(canvas, R.drawable.maze_award_medallion, drawX, drawY, ts, ts);
 
         //--------------------------------------KARANLIK---------------------------------------
         if(darknessRadius > 0)
@@ -275,7 +279,7 @@ public class MazeEscape implements Game{
     @Override
     public State getState(){ return state; }
     @Override
-    public int getLogoTextureID(){ return -1; }
+    public int getLogoTextureID(){ return R.drawable.logo_maze_escape; }
     @Override
     public void reset(){
         state = State.RUNNING;
@@ -1328,8 +1332,8 @@ public class MazeEscape implements Game{
                 this.hitboxHalfW = 0.25f;
                 this.hitboxHalfH = 0.3f;
 
-                tMin = 0.0f; //4
-                tMax = 0.1f; //6
+                tMin = 0.4f; //4
+                tMax = 0.6f; //6
 
                 //hizalanma payı büyük olmalı
                 ALIGN_EPS = 0.3f;
@@ -1517,7 +1521,7 @@ public class MazeEscape implements Game{
      * Yalnızca "anlamlı" duvarlar silinir (bkz. MIN_LOOP_LENGTH), uygun duvar yetmezse
      * bu sayıdan daha az duvar açılabilir.
      */
-    private static final int OPEN_WALL_COUNT = 15;
+    private static final int OPEN_WALL_COUNT = 25;
 
     /**
      * Bir duvarın silinmeye değer olması için, duvarın iki yanındaki hücreler arasındaki mevcut

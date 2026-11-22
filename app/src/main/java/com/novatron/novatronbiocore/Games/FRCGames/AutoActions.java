@@ -83,8 +83,7 @@ public class AutoActions{
         void end(@NonNull Physic3D.Robot robot);
     }
 
-    /**
-     * Lamda ile bir koşul yazıp bunu AutoAction'lara koşul olarak atamak
+    /** Lamda ile bir koşul yazıp bunu AutoAction'lara koşul olarak atamak
      * amacıyla kullanılır. */
     public interface Condition{
         /** @return true: koşul sağlandı, false: koşul henüz sağlanmadı. */
@@ -820,8 +819,11 @@ public class AutoActions{
 
         @Override
         public boolean execute(@NonNull Physic3D.Robot robot, float dt){
-            //atış başarılı
-            if(robot.shoot(x, y, z)) shotCounter++;
+            //robotun tekte çoklu top atmasına karşın, intake'den çıkan topları say
+            int beforeBallCount = robot.getIntakeCount();
+            robot.shoot(x, y, z);
+            shotCounter += robot.getIntakeCount() - beforeBallCount;
+
             return (untilIntakeEmpty) ? robot.getIntakeCount() == 0 : shotCounter >= targetShotCount;
         }
 

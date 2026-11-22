@@ -8,6 +8,7 @@ import android.view.MotionEvent;
 import com.novatron.novatronbiocore.Configs;
 import com.novatron.novatronbiocore.GamePanel;
 import com.novatron.novatronbiocore.Games.FRCGames.AutoActions;
+import com.novatron.novatronbiocore.Games.FRCGames.Rebuilt.Brains.NavGrid;
 import com.novatron.novatronbiocore.Games.FRCGames.Rebuilt.Brains.RobotBrain;
 import com.novatron.novatronbiocore.Games.Game;
 import com.novatron.novatronbiocore.R;
@@ -94,11 +95,12 @@ public class FRCGameRebuilt implements Game{
     private FuelBall[] allRedOutpost, allBlueOutpost;
     //atış planlaması için (RobotRebuilt.canShootFrom): topu durduran sabit engeller (sensör olmayanlar), preloadGame'de bir kez toplanır
     private Physic3D.Obstacle[] solidObstacles = new Physic3D.Obstacle[0];
+    //botların yol bulması için saha haritaları: robot yüksekliği başına bir tane (hendek çubuğunun altından geçebilme yüksekliğe bağlı)
+    private final java.util.HashMap<Float, NavGrid> navGrids = new java.util.HashMap<>();
     private int redOutpostCount, blueOutpostCount;
     private float redOutpostCounter, blueOutpostCounter;
 
     //TODO temps
-    private final Paint fieldPaint = new Paint();
     private final Paint robotPaint = new Paint();
 
     //buton (UI thread) yazar, oyun thread'i okur: volatile değerin görünürlüğünü garanti eder
@@ -117,7 +119,6 @@ public class FRCGameRebuilt implements Game{
     private Paint indicatorTimePaint;
     private Paint indicatorTeleopPaint;
     private Paint indicatorTeleopTimePaint;
-    private Paint depotPaint;
 
     private float playerPointerTextX;
 
@@ -127,10 +128,6 @@ public class FRCGameRebuilt implements Game{
         this.gp = gp;
         //noinspection SuspiciousNameCombination
         this.viewport = new Viewport(FIELD_DEPTH_METERS, FIELD_WIDTH_METERS); //(ekran yatayı = z, ekran dikeyi = x)
-
-        fieldPaint.setColor(Color.DKGRAY);
-        fieldPaint.setStyle(Paint.Style.STROKE);
-        fieldPaint.setStrokeWidth(5f);
 
         robotPaint.setColor(Color.BLUE);
         robotPaint.setStyle(Paint.Style.FILL);
@@ -199,7 +196,6 @@ public class FRCGameRebuilt implements Game{
 
         for(int i = 0; i < physic.entities.size(); i++)
             physic.entities.get(i).update(DT);
-
 
         redOutpostCounter = Math.max(0, redOutpostCounter - DT);
         blueOutpostCounter = Math.max(0, blueOutpostCounter - DT);
@@ -316,18 +312,8 @@ public class FRCGameRebuilt implements Game{
         canvas.drawColor(Color.parseColor("#313131"));
 
         //-----------------------------SAHA ÇİZİMİ-----------------------------
-        //ekran yatayı = z, ekran dikeyi = x
-        float fieldLeft = viewport.toPixelX(0);
-        //noinspection SuspiciousNameCombination
-        float fieldTop = viewport.toPixelY(FIELD_WIDTH_METERS);
-        float fieldRight = viewport.toPixelX(FIELD_DEPTH_METERS);
-        float fieldBottom = viewport.toPixelY(0);
-        canvas.drawRect(fieldLeft, fieldTop, fieldRight, fieldBottom, fieldPaint);
-
-        //kırmızı deposu
-        drawDepot(canvas, FIELD_WIDTH_METERS - DEPOT_OFFSET_X - DEPOT_W, 0f, Color.RED);
-        //mavi deposu
-        drawDepot(canvas, DEPOT_OFFSET_X, FIELD_DEPTH_METERS - DEPOT_D, Color.BLUE);
+        gp.imageStore.drawScaledPixelImageWithCenter(canvas, R.drawable.frc_rebuilt_field, gp.SCREEN_WIDTH/2f, gp.SCREEN_HEIGHT/2f,
+                viewport.toPixelSize(FIELD_DEPTH_METERS), viewport.toPixelSize(FIELD_WIDTH_METERS));
 
         //----------------------------CANLİ ÇİZİMİ----------------------------
         physic.drawEntities(canvas, robotPaint); //tabanı yüksek olan cisim üstte çizilir
@@ -355,18 +341,6 @@ public class FRCGameRebuilt implements Game{
         if(!Configs.DEBUG) return;
         String text = String.format(Locale.US, "X: %f, Z: %f", touchX, touchZ);
         canvas.drawText(text, 20, gp.SCREEN_HEIGHT - 40, gp.ui.fontDebugText);
-    }
-    /** @param minX deponun x eksenindeki başlangıcı (m), @param minZ deponun z eksenindeki başlangıcı (m) */
-    private void drawDepot(Canvas canvas, float minX, float minZ, int color){
-        float half = DEPOT_FRAME_W / 2f;
-        //ekran yatayı = z, ekran dikeyi = x
-        float left   = viewport.toPixelX(minZ + half);
-        float right  = viewport.toPixelX(minZ + DEPOT_D - half);
-        float top    = viewport.toPixelY(minX + DEPOT_W - half);
-        float bottom = viewport.toPixelY(minX + half);
-        depotPaint.setStrokeWidth(viewport.toPixelSize(DEPOT_FRAME_W));
-        depotPaint.setColor(color);
-        canvas.drawRect(left, top, right, bottom, depotPaint);
     }
     private void drawIndicator(Canvas canvas, float centerX, float centerY, float width, float height){
         gp.imageStore.drawScaledPixelImageWithCenter(canvas,(inAutonomous)
@@ -436,18 +410,24 @@ public class FRCGameRebuilt implements Game{
         final float BLUE_ALLIANCE_Z = FIELD_DEPTH_METERS - RED_ALLIANCE_Z;
 
         //-----------------------------------KIRMIZI İTTİFAK-----------------------------------
+        /**/
         addRobot(new RobotRebuilt(7.4f, 0f, RED_ALLIANCE_Z, (float) Math.toRadians(180), 0.4f, 30,  false,
                 0.3f, 58f, 0.41f, false).setAutoScript(AutoActionSetter::setRobot1Autonomous));
+        /**/
         addRobot(new RobotRebuilt(4.1f, 0f, RED_ALLIANCE_Z, (float) Math.toRadians(180), 0.64f, 35,  false,
                 0.2f, 60f, 0.69f, true).setAutoScript(AutoActionSetter::setRobot2Autonomous));
+        /**/
         this.playerRobot = addRobot(new RobotRebuilt(2.7f, 0f, RED_ALLIANCE_Z, (float) Math.toRadians(0), 0.62f, 45, false,
                 0.08f, 65f, 0.64f, true).setAutoScript(AutoActionSetter::setRobot3Autonomous));
 
         //-------------------------------------MAVİ İTTİFAK-------------------------------------
+        /**/
         addRobot(new RobotRebuilt(7.4f, 0f, BLUE_ALLIANCE_Z, (float) Math.toRadians(180), 0.55f, 35,  true,
                 0.15f, 62f, 0.57f, true).setAutoScript(AutoActionSetter::setRobot4Autonomous));
+        /**/
         addRobot(new RobotRebuilt(5.8f, 0f, BLUE_ALLIANCE_Z, (float) Math.toRadians(270), 0.4f, 25,  true,
                 0.25f, 60f, 0.41f, true).setAutoScript(AutoActionSetter::setRobot5Autonomous));
+        /**/
         addRobot(new RobotRebuilt(0.7f, 0f, BLUE_ALLIANCE_Z, (float) Math.toRadians(0), 0.54f, 40,  true,
                 0.09f, 60f, 0.59f, false).setAutoScript(AutoActionSetter::setRobot6Autonomous));
 
@@ -476,6 +456,7 @@ public class FRCGameRebuilt implements Game{
         //---------------------------------------ENGELLER---------------------------------------
         setObstacles();
         collectSolidObstacles();
+        for(RobotRebuilt robot : robots) getNavGrid(robot); //haritaları maç içinde kurup kare atlatmamak için şimdi kur
 
         //-------------------------------JOYSTICK VE DEGREE_STICK-------------------------------
         if(Configs.IS_USE_FLOATING_VIEWS){
@@ -520,15 +501,12 @@ public class FRCGameRebuilt implements Game{
         indicatorTeleopTimePaint.setTextSize(gp.tileSize*0.13f);
         teleopTimeWidth = indicatorTeleopTimePaint.measureText("00");
 
-        depotPaint = new Paint();
-        depotPaint.setStyle(Paint.Style.STROKE);
-        depotPaint.setStrokeWidth(viewport.toPixelSize(DEPOT_FRAME_W));
-
         playerPointerTextX = gp.ui.fontScore.measureText(gp.getContext().getString(R.string.you));
 
 
         gp.imageStore.preloadImage(R.drawable.frc_game_counter);
         gp.imageStore.preloadImage(R.drawable.frc_game_counter_autonomous);
+        gp.imageStore.preloadImage(R.drawable.frc_rebuilt_field);
 
         gp.audioSystem.loadSound(R.raw.frc_game_end);
         gp.audioSystem.loadSound(R.raw.frc_game_end_game);
@@ -584,7 +562,7 @@ public class FRCGameRebuilt implements Game{
     }
     private void addHub(float startZ, boolean isBlueHub){
         physic.addEntity(new Physic3D.Obstacle(
-                FIELD_WIDTH_METERS/2f, 0, startZ, 0,
+                getHubCenterX(), 0, startZ, 0,
                 HUB_W, HUB_H, HUB_D, viewport, gp.ui.fontDebug){
 
             private static final float HUB_EXIT_HEIGHT     = 0.35f; //çıkış yüksekliği (topun tabanı, m)
@@ -717,36 +695,14 @@ public class FRCGameRebuilt implements Game{
     public int getRemainingTimeInPeriod(){
         int remainingTicks;
 
-        if(time <= 31 * 60){
-            //Periyot 6 (Endgame): 30. saniyeden 0'a doğru kalan süre doğrudan time kadardır
-            remainingTicks = time;
-        }
-        else if(time <= 55 * 60){
-            //Periyot 5: 55. saniyeden 30. saniyeye kalan süre
-            remainingTicks = time - (30 * 60);
-        }
-        else if(time <= 81 * 60){
-            //Periyot 4: 80. saniyeden 55. saniyeye kalan süre
-            remainingTicks = time - (55 * 60);
-        }
-        else if(time <= 106 * 60){
-            //Periyot 3: 105. saniyeden 80. saniyeye kalan süre
-            remainingTicks = time - (80 * 60);
-        }
-        else if(time < 131 * 60){
-            //Periyot 2: 130. saniyeden 105. saniyeye kalan süre
-            remainingTicks = time - (105 * 60);
-        }
-        else if(time < 141 * 60){
-            //Periyot 1: 140. saniyeden 130. saniyeye kalan süre
-            remainingTicks = time - (130 * 60);
-        }
-        else{
-            remainingTicks = 0;
-        }
-
-        if(remainingTicks < 0)
-            remainingTicks = 0;
+        if(time <= 31 * 60){ remainingTicks = time; }
+        else if(time <= 55 * 60){ remainingTicks = time - (30 * 60); }
+        else if(time <= 81 * 60){ remainingTicks = time - (55 * 60); }
+        else if(time <= 106 * 60){ remainingTicks = time - (80 * 60); }
+        else if(time < 131 * 60){ remainingTicks = time - (105 * 60); }
+        else if(time < 141 * 60){ remainingTicks = time - (130 * 60); }
+        else{ remainingTicks = 0; }
+        if(remainingTicks < 0) remainingTicks = 0;
 
         //Tick değerini saniyeye çevirip döndürür
         return remainingTicks / 60;
@@ -768,13 +724,9 @@ public class FRCGameRebuilt implements Game{
     /** Teleop'ta verilen periyotta hub aktif mi? (kırmızı: 1, 2, 4, 6 - mavi: 1, 3, 5, 6) */
     private static boolean isHubActiveInPeriod(boolean blue, int period){
         switch(period){
-            case 1: case 6:
-                return true;
-            case 2: case 4:
-                return !blue;
-            case 3: case 5:
-                return blue;
-
+            case 1: case 6: return true;
+            case 2: case 4: return !blue;
+            case 3: case 5: return blue;
             default: return false;
         }
     }
@@ -807,6 +759,15 @@ public class FRCGameRebuilt implements Game{
     public boolean isInAutonomous(){ return inAutonomous; }
     /** Fizik dünyası: botlar yalnızca SORGU için kullanmalı (cisim ekleyip silme, konum değiştirme yok). */
     public Physic3D getPhysic(){ return physic; }
+    /** Robotun yüksekliğine uygun yol bulma haritası (aynı yükseklikteki robotlar paylaşır; tek thread'den kullan). */
+    public NavGrid getNavGrid(RobotRebuilt robot){
+        NavGrid grid = navGrids.get(robot.height);
+        if(grid == null){
+            grid = NavGrid.build(physic, robot.height, Physic3D.Robot.ROBOT_SIZE / 2f);
+            navGrids.put(robot.height, grid);
+        }
+        return grid;
+    }
     /** Hub merkezinin x konumu (iki hub de sahanın x ortasında) */
     public static float getHubCenterX(){ return FIELD_WIDTH_METERS / 2f; }
     /** Hub merkezinin z konumu (mavi: büyük z tarafı, kırmızı: küçük z tarafı) */
@@ -820,6 +781,7 @@ public class FRCGameRebuilt implements Game{
             physic.entities.clear();
         physic = null;
         solidObstacles = new Physic3D.Obstacle[0];
+        navGrids.clear();
         robots.clear();
         playerRobot = null;
         java.util.Arrays.fill(allRedOutpost, null);
@@ -834,6 +796,7 @@ public class FRCGameRebuilt implements Game{
         indicatorTimePaint = null;
         gp.imageStore.removeImage(R.drawable.frc_game_counter);
         gp.imageStore.removeImage(R.drawable.frc_game_counter_autonomous);
+        gp.imageStore.removeImage(R.drawable.frc_rebuilt_field);
         gp.audioSystem.release();
         ispreloaded = false;
     }
@@ -876,7 +839,7 @@ public class FRCGameRebuilt implements Game{
 
     public static class FuelBall extends Physic3D.Ball{
 
-        public static final float RADIUS = 0.07506f; //25 cm çap (0.075m yarıçap)
+        public static final float RADIUS = 0.07506f; //15 cm çap (0.075m yarıçap)
 
         //çizim: üstten görünüşte yükseklik, topun büyümesiyle ve zeminde bir gölgeyle gösterilir
         private static final float HEIGHT_DRAW_SCALE = 0.5f;  //her 1 m yükseklik için yarıçap +%50
@@ -939,6 +902,8 @@ public class FRCGameRebuilt implements Game{
         private final ArrayList<FuelBall> landedOnTop = new ArrayList<>(); //burada tanımlamamın sebebi, robotlar her sezon yukarıdan yakıt alamayacak
         /** Robot top fırlatmak için hedefe dönmek zorunda mı? */
         public final boolean shouldTurnTarget;
+        /** Tek bir atışta çoklu atabilir mi? */
+        public boolean canShootMultiBall = false;
 
         public final FRCGameRebuilt game = FRCGameRebuilt.this;
         public RobotBrain brain;
@@ -959,8 +924,6 @@ public class FRCGameRebuilt implements Game{
 
         @Override
         public void update(float dt){
-            //beyin teleop başlayana kadar çalışmaz: otonomda robotun otonom kuyruğunu bozmasın, otonomdan teleop'a geçiş
-            //beklemesinde (stopAutonomous sonrası, inAutonomous hâlâ true) botlar oyuncudan önce hareket etmesin
             if(brain != null && !game.isInAutonomous() && game.getRealTime() > 0)
                 brain.update(this, dt);
             super.update(dt);
@@ -976,13 +939,10 @@ public class FRCGameRebuilt implements Game{
         public void updateIntake(){
             if(world == null) return;
 
-            //robotun TEPESİNE düşen yakıtlar: yer varsa intake açık olmasa da içeri alınır (örn. outpost'tan dökülen toplar).
-            //Yer yoksa top tepede kalır ve kayganlıkla düşer. Aday yalnızca indiği kare için geçerlidir; üstünde duran top
-            //her karede yeniden aday olduğu için robotun yeri açılırsa sonradan da alınır.
             for(int i = 0; i < landedOnTop.size(); i++){
                 FuelBall fuel = landedOnTop.get(i);
                 if(fuel.getWorld() != world || intakeCount >= stored.length) continue;
-                if(world.removeEntity(fuel)){ //true = top bizim
+                if(world.removeEntity(fuel)){ //true = topu biz aldık(başkası almalış)
                     fuel.velocity.setZero();
                     stored[intakeCount++] = fuel;
                 }
@@ -1000,7 +960,7 @@ public class FRCGameRebuilt implements Game{
 
         @Override
         public boolean isTargetFuel(Physic3D.PhysicsEntity e){
-            return e instanceof FuelBall; //sadece topları al
+            return e instanceof FuelBall; //sadece FuelBall'ları al
         }
 
         @Override
@@ -1020,7 +980,7 @@ public class FRCGameRebuilt implements Game{
         public boolean canGoUnderTheTrench(){ return height < TRENCH_STICK_H; }
 
         //--------------------------------------SHOOTER--------------------------------------
-        /** Namlunun robota göre azami top hızı (m/s). Hedef bunu gerektiriyorsa atış yapılamaz. TODO robota özel */
+        /** Namlunun robota göre azami top hızı (m/s). Hedef bunu gerektiriyorsa atış yapılamaz. */
         public static final float MAX_SHOOT_SPEED = 12f;
         /** Atış hatası: yatay yönde (radyan) ve hızda (oran) standart sapma. 0 = kusursuz nişan. Robota özel ayarlanabilir.
          *  Rastgelelik dünyanın seed'li random'ından gelir (deterministik). */
@@ -1118,8 +1078,7 @@ public class FRCGameRebuilt implements Game{
             return solveShot(dx, targetY - (position.y + shooterHeight), dz);
         }
 
-        /**
-         * PLANLAMA sorgusu (bot beyni için): robot (fromX, fromZ)'de zeminde DURURKEN hedefe atış yaparsa top hedefe ulaşır mı?
+        /** Planlama sorgusu (bot beyni için): robot (fromX, fromZ)'de zeminde DURURKEN hedefe atış yaparsa top hedefe ulaşır mı?
          * Menzil, namlu hızı, hedefe inerek varma koşulu (canShoot ile aynı hesap) VE atış yolunun üzerindeki sabit engeller
          * (file/ağ, kule, hendek...) dikkate alınır: top yolda bir engele çarparsa false. Bekleme süresi, mermi sayısı ve
          * robotun şu anki yönü dikkate ALINMAZ (beyin oraya gidip hedefe döner). Robotun/topun durumunu değiştirmez.
@@ -1136,12 +1095,10 @@ public class FRCGameRebuilt implements Game{
             return canShootFrom(fromX, fromZ, getHubCenterX(), HUB_H, getHubCenterZ(isBlueAlliance));
         }
 
-        /**
-         * Top (x0, y0, z0)'dan v hızıyla çıkıp hedef yüksekliğine (targetY) İNENE kadar sabit bir engele çarpar mı?
+        /** Top (x0, y0, z0)'dan v hızıyla çıkıp hedef yüksekliğine (targetY) İNENE kadar sabit bir engele çarpar mı?
          * Fizikle aynı adımda ve sırada simüle edilir (DT, yatay konum, sonra yarı-örtük Euler dikey). Engel testi
          * topun yarıçapı + shotClearance kadar yatayda şişirilmiş dikdörtgenle yapılır (top hitbox'ı sekizgen, bu hafif
-         * muhafazakâr). Yükseklik aralığı aynen alınır: hedefin tam üstünden inen top hub'ın üstünü engel saymaz.
-         */
+         * muhafazakâr). Yükseklik aralığı aynen alınır: hedefin tam üstünden inen top hub'ın üstünü engel saymaz. */
         private boolean isShotObstructed(float x0, float y0, float z0, float vx, float vy, float vz, float targetY){
             final float R = FuelBall.RADIUS, ballHeight = R * 2f, reach = R + shotClearance;
             float x = x0, y = y0, z = z0;

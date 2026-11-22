@@ -245,7 +245,7 @@ public final class AutoActionSetter{
         actions.addAutoTask(new AutoActions.Shoot(4.026f, 1.83f, 11.815f));
         //depoya git
         actions.addAutoTask(new AutoActions.ParallelActions(
-                new AutoActions.DriveToPosition(0.60f, FRCGameRebuilt.FIELD_DEPTH_METERS-Physic3D.Robot.ROBOT_SIZE/2f, 3f, false),
+                new AutoActions.WithTimeout(new AutoActions.DriveToPosition(0.60f, FRCGameRebuilt.FIELD_DEPTH_METERS-Physic3D.Robot.ROBOT_SIZE/2f, 3f, false), 1.5f),
                 new AutoActions.TurnToAngle((float)Math.toRadians(0))
         ));
         //depoyu toplarken tüm topları ateşle
