@@ -923,19 +923,56 @@ public class FRCGameRebuilt implements Game{
 
     public class RobotRebuilt extends Physic3D.Robot{
 
+        //--------------------------------------STATICLER--------------------------------------
+        public static final float DEFAULT_MAX_SHOOT_SPEED = 12f;
+        /** Hub'ın önündeki (x ekseninde hub'la aynı hizadaki) yasak bandın yarı genişliği (m): nötr bölgeden kendi alanına atma bu bandın
+         *  içindeyken yasak, çünkü top hub'a ve ağa çarpar. = ağın yarı genişliği + top yarıçapı + sapma payı. */
+        public static final float HUB_FRONT_BAND_HALF_WIDTH = 1.4419f / 2f + FuelBall.RADIUS + 0.05f;
+        private static final float SHOT_MIN_TIME  = 0.05f; //uçuş süresi taraması (s)
+        private static final float SHOT_MAX_TIME  = 3.0f;
+        private static final float SHOT_SCAN_STEP = 0.02f;
+        private static final float SHOT_MAX_GAUSS = 2.5f;  //hata dağılımının kuyruğunu kes (sigma cinsinden)
+        private static final float SHOT_MAX_ANGLE_ERR = (float)(5 * Math.PI / 180f); //hedefe dönmek gerekiyorsa en fazla ~5 derece hata payı
+
+
+        //--------------------------------------ALANLAR---------------------------------------
+
         //bu karede robotun tepesine inen toplar (updateIntake işler)
         private final ArrayList<FuelBall> landedOnTop = new ArrayList<>(); //burada tanımlamamın sebebi, robotlar her sezon yukarıdan yakıt alamayacak
+
+        //----------------------------SHOOTER----------------------------
         /** Robot top fırlatmak için hedefe dönmek zorunda mı? */
         public final boolean shouldTurnTarget;
+        /** Robotun shooter'ı robot'tun ne kadar üstünde? */
+        public float shooterHeight;
+        /** Robot merkezi orijin olacak şekilde robot shooter'ının konumu */
+        protected float shooterOffsetX = 0f, shooterOffsetZ = 0f;
         /** Tek bir atışta çoklu atabilir mi? */
         public boolean canShootMultiBall = false;
+        /** Namlunun robota göre azami top hızı (m/s). Hedef bunu gerektiriyorsa atış yapılamaz: dolaylı olarak azami atış mesafesidir. */
+        public float maxShootSpeed = DEFAULT_MAX_SHOOT_SPEED;
+        /** Atış hatası: yatay yönde (radyan) ve hızda (oran) standart sapma. 0 = kusursuz nişan. Robota özel ayarlanabilir.*/
+        public float shootAngleSigma = (float)Math.toRadians(0.5f);
+        public float shootSpeedSigma = 0.01f;
+        /** canShootFrom'un engel testinde topun yarıçapına eklenen yatay güvenlik payı (m): atış hatası (sapma) yüzünden
+         *  bir engelin (ağın kenarı, hub'ın kenarı) hemen yanından geçen sınırda atışlar "olur" sayılmasın. 0 = tam sınır. */
+        public float shotClearance = 0.05f;
+        /** true: nötr bölgedeyken (hub'ın önündeki bant hariç) topları kendi ittifak bölgesine fırlatabilir. */
+        public boolean canThrowToAllianceArea = false;
+        /** ALLIANCE_THROW atışının hedef z'si (kendi ittifak bölgesinde). Varsayılan: ittifak bölgesinin tam ortası. */
+        public float throwTargetZ;
+        /** solveShot'un sonucu topun dünya hızı */
+        private final com.badlogic.gdx.math.Vector3 shotVelocity = new com.badlogic.gdx.math.Vector3();
 
         public final FRCGameRebuilt game = FRCGameRebuilt.this;
         public RobotBrain brain;
 
         public RobotRebuilt(float startX, float startY, float startZ, float startHeading, float robotHeight, int intakeCapacity, boolean isBlueAlliance,
                             float shooterDelay, float shooterAngle, float shooterHeight, boolean shouldTurnToTarget){
-            super(startX, startY, startZ, startHeading, robotHeight, intakeCapacity, isBlueAlliance, shooterDelay, shooterAngle, shooterHeight);
+            super(startX, startY, startZ, startHeading, robotHeight, intakeCapacity, isBlueAlliance, shooterDelay, shooterAngle);
+            if(shooterHeight + 0.02f < robotHeight)
+                throw new IllegalArgumentException("Shooter robotan yukarıda olmalı: "+shooterHeight);
+            this.shooterHeight = shooterHeight;
             this.shouldTurnTarget = shouldTurnToTarget;
             this.throwTargetZ = (isBlueAlliance) ? FIELD_DEPTH_METERS - ALLIANCE_ZONE_DEPTH / 2f : ALLIANCE_ZONE_DEPTH / 2f;
         }
@@ -1025,34 +1062,47 @@ public class FRCGameRebuilt implements Game{
             this.throwTargetZ = z; return this;
         }
         public RobotRebuilt setCanShootMultiBall(boolean can){ this.canShootMultiBall = can; return this; }
+        /** Shooter'ı robotun üzerinde başka bir yere taşır (varsayılan: (0, 0)). Konum, ROBOT MERKEZİ orijin alınarak verilir:
+         *  x ve z -ROBOT_SIZE/2 .. ROBOT_SIZE/2 aralığında. Eksenler: x robotun ön yönü, z ön yönün 90° ilerisi (heading 0'da dünya +x ve +z). */
+        public RobotRebuilt setShooterPositionFromCenter(float x, float z){
+            final float half = ROBOT_SIZE / 2f;
+            if(!(x >= -half - 1e-4f && x <= half + 1e-4f) || !(z >= -half - 1e-4f && z <= half + 1e-4f))
+                throw new IllegalArgumentException("Merkez orijinli shooter konumu -ROBOT_SIZE/2 ile ROBOT_SIZE/2 (" + half + ") arasında olmalı: (" + x + ", " + z + ")");
+            this.shooterOffsetX = x;
+            this.shooterOffsetZ = z;
+            return this;
+        }
 
         //--------------------------------------SHOOTER--------------------------------------
-        public static final float DEFAULT_MAX_SHOOT_SPEED = 12f;
-        /** Hub'ın önündeki (x ekseninde hub'la aynı hizadaki) yasak bandın yarı genişliği (m): nötr bölgeden kendi alanına atma bu bandın
-         *  içindeyken yasak, çünkü top hub'a ve ağa çarpar. = ağın yarı genişliği + top yarıçapı + sapma payı. */
-        public static final float HUB_FRONT_BAND_HALF_WIDTH = 1.4419f / 2f + FuelBall.RADIUS + 0.05f;
 
-        /** Namlunun robota göre azami top hızı (m/s). Hedef bunu gerektiriyorsa atış yapılamaz: dolaylı olarak azami atış mesafesidir. */
-        public float maxShootSpeed = DEFAULT_MAX_SHOOT_SPEED;
-        /** Atış hatası: yatay yönde (radyan) ve hızda (oran) standart sapma. 0 = kusursuz nişan. Robota özel ayarlanabilir.*/
-        public float shootAngleSigma = (float)Math.toRadians(0.5f);
-        public float shootSpeedSigma = 0.01f;
-        /** canShootFrom'un engel testinde topun yarıçapına eklenen yatay güvenlik payı (m): atış hatası (sapma) yüzünden
-         *  bir engelin (ağın kenarı, hub'ın kenarı) hemen yanından geçen sınırda atışlar "olur" sayılmasın. 0 = tam sınır. */
-        public float shotClearance = 0.05f;
-        /** true: nötr bölgedeyken (hub'ın önündeki bant hariç) topları kendi ittifak bölgesine fırlatabilir. */
-        public boolean canThrowToAllianceArea = false;
-        /** ALLIANCE_THROW atışının hedef z'si (kendi ittifak bölgesinde). Varsayılan: ittifak bölgesinin tam ortası. */
-        public float throwTargetZ;
+        /** Shooter'ın varsayılan konumunun robot merkezine göre yerel x'i (robotun ön yönü). Bkz. shooterOffsetX. */
+        public float getShooterOffsetX(){ return shooterOffsetX; }
+        /** Shooter'ın varsayılan konumunun robot merkezine göre yerel z'si (ön yönün 90° ilerisi). Bkz. shooterOffsetX. */
+        public float getShooterOffsetZ(){ return shooterOffsetZ; }
 
-        private static final float SHOT_MIN_TIME  = 0.05f; //uçuş süresi taraması (s)
-        private static final float SHOT_MAX_TIME  = 3.0f;
-        private static final float SHOT_SCAN_STEP = 0.02f;
-        private static final float SHOT_MAX_GAUSS = 2.5f;  //hata dağılımının kuyruğunu kes (sigma cinsinden)
-        private static final float SHOT_MAX_ANGLE_ERR = (float)(5 * Math.PI / 180f); //hedefe dönmek gerekiyorsa en fazla ~5 derece hata payı
+        /** Robota göre yerel (merkez orijinli, döndürülmemiş) bir noktanın, robot heading kadar döndürülünce DÜNYA x'ine olan KAYMASI
+         *  (robot konumuna eklenir). Robot gerçek ya da varsayımsal bir yönde olabilsin diye yön parametredir. */
+        public float rotateLocalX(float heading, float localX, float localZ){
+            return localX * (float)Math.cos(heading) - localZ * (float)Math.sin(heading);
+        }
+        /** rotateLocalX'in z karşılığı. */
+        public float rotateLocalZ(float heading, float localX, float localZ){
+            return localX * (float)Math.sin(heading) + localZ * (float)Math.cos(heading);
+        }
 
-        /** solveShot'un sonucu topun dünya hızı */
-        private final com.badlogic.gdx.math.Vector3 shotVelocity = new com.badlogic.gdx.math.Vector3();
+        /** Robotun üzerindeki yerel (merkez orijinli, döndürülmemiş) bir noktanın robotun ŞU ANKİ konum ve yönüne göre dünya x'i.
+         *  Çoklu atışta shooter'ı yerelde sağa/sola kaydırıp bu metoda vererek her topun çıkış noktası bulunur. */
+        public float getShooterWorldX(float localX, float localZ){ return position.x + rotateLocalX(heading, localX, localZ); }
+        /** getShooterWorldX'in z karşılığı. */
+        public float getShooterWorldZ(float localX, float localZ){ return position.z + rotateLocalZ(heading, localX, localZ); }
+        /** Shooter'ın (varsayılan konumu) şu anki dünya x'i. */
+        public float getShooterWorldX(){ return getShooterWorldX(shooterOffsetX, shooterOffsetZ); }
+        /** Shooter'ın (varsayılan konumu) şu anki dünya z'si. */
+        public float getShooterWorldZ(){ return getShooterWorldZ(shooterOffsetX, shooterOffsetZ); }
+        /** Shooter'ın dünya y'si (topun çıkış tabanı): robot zemindeki konumu + shooterHeight. */
+        public float getShooterWorldY(){ return position.y + shooterHeight; }
+
+        private float throwHeading(){ return (isBlueAlliance) ? (float)(Math.PI / 2f) : -(float)(Math.PI / 2f); }
 
         /** (x, z) konumunda bu robot hangi atışı kullanırdı? Sadece konuma ve robot ayarına bakar; intake, bekleme, menzil, engel hesaba katılmaz. */
         public ShotMode getShotModeAt(float x, float z){
@@ -1071,14 +1121,30 @@ public class FRCGameRebuilt implements Game{
         public ShotMode getShotMode(){ return getShotModeAt(position.x, position.z); }
 
         //son planlanan atış hedefi (planShot yazar)
+        private float planFromX, planFromZ, planHeading;
         private float planX, planY, planZ;
 
-        /** mode için (x, z) konumundaki robotun atış hedefini plan* alanlarına yazar. mode NONE olmamalı. */
+        /** mode için robot (x, z)'deyken: atış yönünü (planHeading), o yöndeki shooter konumunu (planFrom*) ve hedefi (plan*) yazar.
+         *  Yön, shooter'ın hedefe bakacağı yöndür: hub'da shooter hub'a bakar (shooter merkezde değilse yön robot merkezinden hub'a
+         *  olan yönden biraz farklı olur, kısa bir yinelemeyle bulunur); atmada kendi alanımıza doğrudur. mode NONE olmamalı. */
         private void planShot(ShotMode mode, float x, float z){
             if(mode == ShotMode.HUB){
-                planX = getHubCenterX(); planY = HUB_H; planZ = getHubCenterZ(isBlueAlliance);
-            }else{ //ALLIANCE_THROW: aynı x, sabit z, zemin
-                planX = x; planY = 0f; planZ = throwTargetZ;
+                final float hx = getHubCenterX(), hz = getHubCenterZ(isBlueAlliance);
+                float h = (float)Math.atan2(hz - z, hx - x);
+                float mx = x, mz = z;
+                for(int i = 0; i < 5; i++){
+                    mx = x + rotateLocalX(h, shooterOffsetX, shooterOffsetZ);
+                    mz = z + rotateLocalZ(h, shooterOffsetX, shooterOffsetZ);
+                    h = (float)Math.atan2(hz - mz, hx - mx);
+                }
+                planHeading = h; planFromX = mx; planFromZ = mz;
+                planX = hx; planY = HUB_H; planZ = hz;
+            }else{ //ALLIANCE_THROW: shooter'la aynı x, sabit z, zemin
+                final float h = throwHeading();
+                planHeading = h;
+                planFromX = x + rotateLocalX(h, shooterOffsetX, shooterOffsetZ);
+                planFromZ = z + rotateLocalZ(h, shooterOffsetX, shooterOffsetZ);
+                planX = planFromX; planY = 0f; planZ = throwTargetZ;
             }
         }
 
@@ -1088,15 +1154,26 @@ public class FRCGameRebuilt implements Game{
             ShotMode mode = getShotMode();
             if(mode == ShotMode.NONE) return Float.NaN;
             planShot(mode, position.x, position.z);
-            return (float)Math.atan2(planZ - position.z, planX - position.x);
+            return planHeading;
         }
 
-        /** Robot şu an shoot() çağırılırsa top atılır mı? (mod, yön (gerekiyorsa), bekleme, intake, menzil) */
+        /** Gerçek atış için robotun ŞU ANKİ yönüne göre shooter konumunu fx/fz'ye, hedefi plan*'a yazar. mode NONE olmamalı. */
+        private void aimNow(ShotMode mode){
+            fromX = getShooterWorldX(); fromZ = getShooterWorldZ();
+            if(mode == ShotMode.HUB){
+                planX = getHubCenterX(); planY = HUB_H; planZ = getHubCenterZ(isBlueAlliance);
+            }else{
+                planX = fromX; planY = 0f; planZ = throwTargetZ;
+            }
+        }
+        private float fromX, fromZ;
+
+        /** Robot şu an shoot() derse top atılır mı? (mod, yön (gerekiyorsa), bekleme, intake, menzil) */
         public boolean canShoot(){
             ShotMode mode = getShotMode();
             if(mode == ShotMode.NONE) return false;
-            planShot(mode, position.x, position.z);
-            return canShoot(planX, planY, planZ);
+            aimNow(mode);
+            return canShoot(planX, planY, planZ, fromX, getShooterWorldY(), fromZ);
         }
 
         /** Bulunduğu yere göre tek atışı yapar: hub bölgesinde hub'a, nötr bölgede (canThrowToAllianceArea ise) kendi alanına atar.
@@ -1105,13 +1182,12 @@ public class FRCGameRebuilt implements Game{
         public boolean shoot(){
             ShotMode mode = getShotMode();
             if(mode == ShotMode.NONE) return false;
-            planShot(mode, position.x, position.z);
-            //TODO 2. aşama: canShootMultiBall ise ön kenara paralel birkaç noktadan (fromX/fromZ) aynı anda çoklu atış
-            return shoot(planX, planY, planZ, position.x, position.y + shooterHeight, position.z);
+            aimNow(mode);
+            //TODO 2. aşama: canShootMultiBall ise shooter'ı yerelde sağa/sola kaydırıp (getShooterWorldX/Z(localX, localZ)) birkaç noktadan aynı anda çoklu atış
+            return shoot(planX, planY, planZ, fromX, getShooterWorldY(), fromZ);
         }
 
-        /**
-         * Sabit atış açısıyla (shooterAngle) top, namludan (dx, dy, dz) kadar ötedeki hedefe İNERKEN ulaşsın diye gereken
+        /** Sabit atış açısıyla (shooterAngle) top, namludan (dx, dy, dz) kadar ötedeki hedefe İNERKEN ulaşsın diye gereken
          * dünya hızını bulur ve shotVelocity'ye yazar. Hedef bir noktadır (topun TABANI o yükseklikten geçer).
          * <br>
          * Nişan alma: shooter dönen bir taret gibidir (robotun yönünden bağımsız yatayda hedefe çevrilir), açısı sabittir; hızı ayarlanır.
@@ -1177,16 +1253,16 @@ public class FRCGameRebuilt implements Game{
         }
 
         @Override
-        public boolean canShoot(float targetX, float targetY, float targetZ){
-            if(!super.canShoot(targetX, targetY, targetZ)) return false;
-            float dx = targetX - position.x;
-            float dz = targetZ - position.z;
+        protected boolean canShoot(float targetX, float targetY, float targetZ, float fromX, float fromY, float fromZ){
+            if(!super.canShoot(targetX, targetY, targetZ, fromX, fromY, fromZ)) return false;
+            float dx = targetX - fromX;
+            float dz = targetZ - fromZ;
 
-            if(shouldTurnTarget){ //robutun hedefe dönmesi gerekiyorsa
+            if(shouldTurnTarget){ //robotun hedefe dönmesi gerekiyorsa: shooter'dan hedefe olan yöne bakmalı
                 float targetAngle = (float)Math.atan2(dz, dx);
                 if(Math.abs(getHeadingError(targetAngle)) > SHOT_MAX_ANGLE_ERR) return false;
             }
-            return solveShot(dx, targetY - (position.y + shooterHeight), dz);
+            return solveShot(dx, targetY - fromY, dz);
         }
 
         /** Planlama sorgusu (bot beyni için): robot (x, z)'de zeminde DURURKEN, o konumdaki atış tipiyle (getShotModeAt) atış yaparsa top
@@ -1201,8 +1277,8 @@ public class FRCGameRebuilt implements Game{
             if(mode == ShotMode.NONE) return false;
             planShot(mode, x, z);
             final float muzzleY = shooterHeight; //robot zeminde: namlunun (topun tabanı) yüksekliği
-            if(!solveShot(planX - x, planY - muzzleY, planZ - z, 0f, 0f)) return false;
-            return !isShotObstructed(x, muzzleY, z, shotVelocity.x, shotVelocity.y, shotVelocity.z, planY);
+            if(!solveShot(planX - planFromX, planY - muzzleY, planZ - planFromZ, 0f, 0f)) return false;
+            return !isShotObstructed(planFromX, muzzleY, planFromZ, shotVelocity.x, shotVelocity.y, shotVelocity.z, planY);
         }
 
         /** canShootFrom'un sadece hub puan atışı olan hâli: (x, z) hub atış bölgesinde ve oradan hub'a atış yapılabiliyor mu? */

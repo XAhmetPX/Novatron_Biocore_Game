@@ -101,7 +101,6 @@ public class Physic3D{
     private float[] bMinX = new float[64], bMaxX = new float[64], bMinZ = new float[64], bMaxZ = new float[64];
     private boolean[] bSmall = new boolean[64];   //cisim "küçük" mü (bkz. buildPairs)
     private int[] largeBodies = new int[16];      //büyük cisimlerin 'bodies' indeksleri (artan sırada)
-    private int largeCount = 0;
     private long[] pairKeys = new long[512];      //çiftler (i << 32 | j), sıralanıp pairA/pairB'ye açılır
     private int pairKeyCount = 0;
 
@@ -881,7 +880,7 @@ public class Physic3D{
     private void buildPairs(){
         pairCount = 0;
         pairKeyCount = 0;
-        largeCount = 0;
+        int largeCount = 0;
         final float smallHalf = gridSize * 0.5f - BROADPHASE_MARGIN - 1e-4f; //küçük cismin merkezden kenara en çok uzaklığı
 
         for(int i = 0; i < bodyCount; i++){
@@ -1214,8 +1213,6 @@ public class Physic3D{
         public final float shooterDelay;
         /** Robotun shooter'ının topu atma açısı. Sabit. Radian cinsinden */
         public final float shooterAngle;
-        /** Robotun shooter'ı robot'tun ne kadar üstünde? */
-        public float shooterHeight;
         private float shooterDelayCounter;
 
         public final boolean isBlueAlliance;
@@ -1224,7 +1221,7 @@ public class Physic3D{
         private final Paint headingIndicator = new Paint();
 
         public Robot(float startX, float startY, float startZ, float startHeading, float robotHeight, int intakeCapacity, boolean isBlueAlliance,
-                     float shooterDelay, float shooterAngle, float shooterHeight){
+                     float shooterDelay, float shooterAngle){
             //kütle (50kg), sekme katsayısı (0.1 - neredeyse hiç sekmez, iter)
             super(startX, startY, startZ, startHeading, 50.0f, 0.1f, robotHeight);
             if(intakeCapacity < 0)
@@ -1232,9 +1229,6 @@ public class Physic3D{
             if(shooterDelay < 0)
                 throw new IllegalArgumentException("Atış bekleme süresi negatir olamaz: "+shooterDelay);
             this.shooterDelay = shooterDelay;
-            if(shooterHeight + 0.02f < robotHeight)
-                throw new IllegalArgumentException("Shooter robotan yukarıda olmalı: "+shooterHeight);
-            this.shooterHeight = shooterHeight;
             if(!(shooterAngle > 0f && shooterAngle < 90f)) //NaN dahil
                 throw new IllegalArgumentException("Atış açısı derece cinsinden 0 ile 90 arasında olmalı: " + shooterAngle);
             this.shooterAngle = (float)Math.toRadians(shooterAngle);
@@ -1519,9 +1513,15 @@ public class Physic3D{
         //dışarıdan çağırılacak
         public abstract boolean shoot();
 
-        protected boolean shoot(float targetX, float targetY, float targetZ, float fromX, float fromY, float fromZ){
+        /**
+         * Asıl atış: (fromX, fromY, fromZ) noktasından (targetX, targetY, targetZ) hedefine bir yakıt fırlatır.
+         * Çoklu atışta namlu noktası robotun merkezinden farklı olabilsin diye (örn. ön kenar boyunca birkaç nokta) kaynak ayrı verilir.
+         * Not: Java'da başka dosyadaki alt sınıf private'a erişemediği için protected; yani dışarıdan çağrılamaz, sadece alt sınıfın shoot()'u çağırır.
+         * Başarılı olursa bekleme süresi (shooterDelay) başlar.
+         */
+        protected final boolean shoot(float targetX, float targetY, float targetZ, float fromX, float fromY, float fromZ){
             //atış yapılamaz
-            if(!canShoot(targetX, targetY, targetZ)) return false;
+            if(!canShoot(targetX, targetY, targetZ, fromX, fromY, fromZ)) return false;
 
             //atış yap
             boolean isShootSuccessful = launch(targetX - fromX, targetY - fromY, targetZ - fromZ, fromX, fromY, fromZ);
@@ -1531,10 +1531,10 @@ public class Physic3D{
             return isShootSuccessful;
         }
 
-        /** Şu an atış yapılabilir mi? Taban kural: dünyada, bekleme süresi bitmiş ve intake'te yakıt var.
+        /** Şu an bu noktadan bu hedefe atış yapılabilir mi? Taban kural: dünyada, bekleme süresi bitmiş ve intake'te yakıt var.
          * Alt sınıflar (örn. hedefe ulaşılabilir mi?) super.canShoot'u çağırıp kendi koşullarını ekler. */
         @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-        public boolean canShoot(float targetX, float targetY, float targetZ){
+        protected boolean canShoot(float targetX, float targetY, float targetZ, float fromX, float fromY, float fromZ){
             return world != null && shooterDelayCounter <= 0f && intakeCount > 0;
         }
 
