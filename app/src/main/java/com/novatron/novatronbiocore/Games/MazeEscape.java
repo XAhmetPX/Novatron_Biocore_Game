@@ -105,6 +105,8 @@ public class MazeEscape implements Game{
     private int D;
     private ArrayList<Entity> entities;
     private float darknessRadius;
+    private final java.util.Comparator<Entity> comparator = //GC için
+            (e1, e2) -> Float.compare(e1.y, e2.y);
 
     private final GamePanel gp;
     private Joystick joystick;
@@ -192,7 +194,7 @@ public class MazeEscape implements Game{
         }
 
         //--------------------------------------CANLILAR--------------------------------------
-        entities.sort((e1, e2) -> Float.compare(e1.y, e2.y));
+        entities.sort(comparator);
         //varsa takip ettikleri yolları çiz
         if(Configs.DEBUG)
             for(Entity e : entities) e.drawPath(canvas);

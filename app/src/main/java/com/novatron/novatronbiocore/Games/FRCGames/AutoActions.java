@@ -792,42 +792,36 @@ public class AutoActions{
     public static class Shoot implements AutoAction{
         private final int targetShotCount;
         private int shotCounter;
-        private final float x, y, z;
         private final boolean untilIntakeEmpty; //intake boşalana kadar mı fırlatacak
 
         /** Robotun intake'inden istenilen sayıda yakıtı ard arda fırlatır. İstenilen
          * sayıda yakıt fırlatana kadar devam eder, eğer robotun intake'inde
          * yeteri kadar yakıt yoksa takılma yaşanabilir. WithTimeout ile sarabilirsin.
          * @param count : atılması hedeflenen yakıt sayısı */
-        public Shoot(int count, float targetX, float targetY, float targetZ){
+        public Shoot(int count){
             this.untilIntakeEmpty = false;
             this.targetShotCount = count;
-            this.x = targetX; this.y = targetY; this.z = targetZ;
         }
 
         /** Robotun intake'i tamamen boşalana kadar tüm yakıtları ard arda fırlatır. */
-        public Shoot(float targetX, float targetY, float targetZ){
+        public Shoot(){
             this.untilIntakeEmpty = true;
             this.targetShotCount = -1;
-            this.x = targetX; this.y = targetY; this.z = targetZ;
         }
 
         @Override
-        public void start(@NonNull Physic3D.Robot robot){
-            shotCounter = 0;
-        }
+        public void start(@NonNull Physic3D.Robot robot){ shotCounter = 0; }
+        @Override
+        public void end(@NonNull Physic3D.Robot robot){}
 
         @Override
         public boolean execute(@NonNull Physic3D.Robot robot, float dt){
             //robotun tekte çoklu top atmasına karşın, intake'den çıkan topları say
             int beforeBallCount = robot.getIntakeCount();
-            robot.shoot(x, y, z);
-            shotCounter += robot.getIntakeCount() - beforeBallCount;
+            robot.shoot();
+            shotCounter += beforeBallCount - robot.getIntakeCount();
 
             return (untilIntakeEmpty) ? robot.getIntakeCount() == 0 : shotCounter >= targetShotCount;
         }
-
-        @Override
-        public void end(@NonNull Physic3D.Robot robot){}
     }
 }

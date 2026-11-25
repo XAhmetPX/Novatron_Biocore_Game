@@ -84,7 +84,7 @@ public class FRCGameRebuilt implements Game{
     private CanvasButton btnIntake, btnShot;
     final Viewport viewport;
     private State state = State.RUNNING;
-    private boolean ispreloaded = false;
+    private boolean isPreloaded = false;
 
     //-----objects-----
     private Physic3D physic;
@@ -97,6 +97,7 @@ public class FRCGameRebuilt implements Game{
     private Physic3D.Obstacle[] solidObstacles = new Physic3D.Obstacle[0];
     //botların yol bulması için saha haritaları: robot yüksekliği başına bir tane (hendek çubuğunun altından geçebilme yüksekliğe bağlı)
     private final java.util.HashMap<Float, NavGrid> navGrids = new java.util.HashMap<>();
+
     private int redOutpostCount, blueOutpostCount;
     private float redOutpostCounter, blueOutpostCounter;
 
@@ -159,19 +160,19 @@ public class FRCGameRebuilt implements Game{
 
         float padding = uiTile * 0.1f;
 
-        if(btnIntake != null && degreeStick != null){
+        if(btnShot != null && degreeStick != null){
             float right = gp.SCREEN_WIDTH - padding;
             float left = right - uiTile * 2;
             float bottom = gp.SCREEN_HEIGHT - (50 + degreeStick.getRadius()*2 + padding);
             float top = bottom - uiTile * 2;
-            btnIntake.setBounds(left, top, right, bottom);
+            btnShot.setBounds(left, top, right, bottom);
         }
 
-        if(btnShot != null && joystick != null){
+        if(btnIntake != null && joystick != null){
             float right = padding + uiTile * 2;
             float bottom = gp.SCREEN_HEIGHT - (50 + joystick.getOuterRadius()*2 + padding);
             float top = bottom - uiTile * 2;
-            btnShot.setBounds(padding, top, right, bottom);
+            btnIntake.setBounds(padding, top, right, bottom);
         }
     }
 
@@ -191,7 +192,7 @@ public class FRCGameRebuilt implements Game{
             playerRobot.intakeActive = intakeOn;
 
             if(shootOn)
-                playerRobot.shoot(FIELD_WIDTH_METERS/2f, HUB_H, ALLIANCE_ZONE_DEPTH + HUB_D/2f);
+                playerRobot.shoot();
         }
 
         for(int i = 0; i < physic.entities.size(); i++)
@@ -234,19 +235,10 @@ public class FRCGameRebuilt implements Game{
 
         playSoundEffect();
         time--;
-        if(inAutonomous){
-            if(time == 59){ //otonom bitti
-                //robot girdilerinin hemen sıfırla
-                for(RobotRebuilt robot : robots)
-                    robot.stopAutonomous();
-            }
-        }
-        else{
-            if(time == 0){
-                //robot girdilerinin hemen sıfırla
-                for(RobotRebuilt robot : robots)
-                    robot.stopAutonomous();
-            }
+        //otonom ve teleop bitişinde robot girdilerini sıfırla
+        if((inAutonomous && time == 59) || (!inAutonomous && time == 0)){
+            for(RobotRebuilt robot : robots)
+                robot.stopAutonomous();
         }
         if(time <= 0){
             if(inAutonomous){
@@ -333,8 +325,10 @@ public class FRCGameRebuilt implements Game{
             //----------UI----------
             if(degreeStick != null) degreeStick.draw(canvas);
             if(joystick != null) joystick.draw(canvas);
-            if(btnIntake != null) btnIntake.draw(canvas);
-            if(btnShot != null) btnShot.draw(canvas);
+            if(!Configs.IS_USE_FLOATING_VIEWS){
+                if (btnIntake != null) btnIntake.draw(canvas);
+                if (btnShot != null) btnShot.draw(canvas);
+            }
         }
 
         //--------DEBUG--------
@@ -370,6 +364,16 @@ public class FRCGameRebuilt implements Game{
                 - indicatorScorePaint.measureText(text)/2f;
         canvas.drawText(text, textX, textY, indicatorScorePaint);
 
+        if(isBlueHubActive())
+            gp.imageStore.drawScaledPixelImageWithCenter(canvas, R.drawable.frc_rebuilt_hub_active_arrow,
+                    centerX + width / 2f + gp.tileSize, centerY,
+                    gp.tileSize/2f, gp.tileSize/2f);
+
+        if(isRedHubActive())
+            gp.imageStore.drawScaledPixelImageWithCenterAndRotate(canvas, R.drawable.frc_rebuilt_hub_active_arrow,
+                    centerX - (width / 2f + gp.tileSize), centerY,
+                    gp.tileSize/2f, gp.tileSize/2f, 180f);
+
         if(inAutonomous) return;
 
         //teleop periyotu
@@ -403,7 +407,7 @@ public class FRCGameRebuilt implements Game{
 
     @Override
     public void preloadGame(){
-        if(ispreloaded) return;
+        if(isPreloaded) return;
         physic = new Physic3D(FIELD_WIDTH_METERS, FIELD_DEPTH_METERS); //(x ölçüsü, z ölçüsü)
 
         final float RED_ALLIANCE_Z = ALLIANCE_ZONE_DEPTH - RobotRebuilt.ROBOT_SIZE / 2f;
@@ -412,7 +416,7 @@ public class FRCGameRebuilt implements Game{
         //-----------------------------------KIRMIZI İTTİFAK-----------------------------------
         /**/
         addRobot(new RobotRebuilt(7.4f, 0f, RED_ALLIANCE_Z, (float) Math.toRadians(180), 0.4f, 30,  false,
-                0.3f, 58f, 0.41f, false).setAutoScript(AutoActionSetter::setRobot1Autonomous));
+                0.3f, 58f, 0.41f, false).setCanThrowToAllianceArea(true).setAutoScript(AutoActionSetter::setRobot1Autonomous));
         /**/
         addRobot(new RobotRebuilt(4.1f, 0f, RED_ALLIANCE_Z, (float) Math.toRadians(180), 0.64f, 35,  false,
                 0.2f, 60f, 0.69f, true).setAutoScript(AutoActionSetter::setRobot2Autonomous));
@@ -507,6 +511,7 @@ public class FRCGameRebuilt implements Game{
         gp.imageStore.preloadImage(R.drawable.frc_game_counter);
         gp.imageStore.preloadImage(R.drawable.frc_game_counter_autonomous);
         gp.imageStore.preloadImage(R.drawable.frc_rebuilt_field);
+        gp.imageStore.preloadImage(R.drawable.frc_rebuilt_hub_active_arrow);
 
         gp.audioSystem.loadSound(R.raw.frc_game_end);
         gp.audioSystem.loadSound(R.raw.frc_game_end_game);
@@ -514,7 +519,7 @@ public class FRCGameRebuilt implements Game{
         gp.audioSystem.loadSound(R.raw.frc_game_match_start);
         gp.audioSystem.loadSound(R.raw.frc_game_teleop_start);
 
-        ispreloaded = true;
+        isPreloaded = true;
     }
     private void setObstacles(){
 
@@ -594,8 +599,10 @@ public class FRCGameRebuilt implements Game{
                     FuelBall b = scored.get(i);
                     if(world == null || b.getWorld() != world) continue;
 
-                    if(isBlueHub && isBlueHubActive()) blueAllianceScore++;
-                    if(!isBlueHub && isRedHubActive()) redAllianceScore++;
+                    if(time > 59){ //süre bittmediyse
+                        if (isBlueHub && isBlueHubActive()) blueAllianceScore++;
+                        if (!isBlueHub && isRedHubActive()) redAllianceScore++;
+                    }
 
                     java.util.Random r = world.random;
 
@@ -774,6 +781,13 @@ public class FRCGameRebuilt implements Game{
     public static float getHubCenterZ(boolean blue){
         return (blue) ? FIELD_DEPTH_METERS - (ALLIANCE_ZONE_DEPTH + HUB_D/2f) : ALLIANCE_ZONE_DEPTH + HUB_D/2f;
     }
+    /** Hub'a atış bölgesinin sınırı (z). Hendek çubuğunun tam orta z'si (= hub merkezinin z'si) ile aynı hizadan,
+     *  robotun hendeğin altından geçip çıktıktan hemen sonrasını da kapsasın diye ROBOT_SIZE kadar nötr bölgeye doğru uzatılmıştır.
+     *  Kırmızıda z <= bu değer, mavide z >= bu değer hub'a atış bölgesidir. */
+    public static float getHubShootZoneLimitZ(boolean blue){
+        float redLimit = getHubCenterZ(false) + Physic3D.Robot.ROBOT_SIZE;
+        return (blue) ? FIELD_DEPTH_METERS - redLimit : redLimit;
+    }
 
     @Override
     public void destroyGame(){
@@ -797,8 +811,9 @@ public class FRCGameRebuilt implements Game{
         gp.imageStore.removeImage(R.drawable.frc_game_counter);
         gp.imageStore.removeImage(R.drawable.frc_game_counter_autonomous);
         gp.imageStore.removeImage(R.drawable.frc_rebuilt_field);
+        gp.imageStore.removeImage(R.drawable.frc_rebuilt_hub_active_arrow);
         gp.audioSystem.release();
-        ispreloaded = false;
+        isPreloaded = false;
     }
     @Override
     public void reset(){
@@ -896,6 +911,16 @@ public class FRCGameRebuilt implements Game{
         @Override public float getGroundFriction(){ return 3.0f; }
     }
 
+    /** Atış tipi. Robotun konumuna göre belirlenir; sürücü/bot hedef seçemez. */
+    public enum ShotMode{
+        /** Bu konumdan atış yapılamaz */
+        NONE,
+        /** Kendi hub'ına (hub'ın tepesinin ortası) puan atışı */
+        HUB,
+        /** Nötr bölgeden, robotla aynı x'te kendi ittifak bölgesindeki sabit bir z'ye (throwTargetZ) zemine atış */
+        ALLIANCE_THROW
+    }
+
     public class RobotRebuilt extends Physic3D.Robot{
 
         //bu karede robotun tepesine inen toplar (updateIntake işler)
@@ -912,6 +937,7 @@ public class FRCGameRebuilt implements Game{
                             float shooterDelay, float shooterAngle, float shooterHeight, boolean shouldTurnToTarget){
             super(startX, startY, startZ, startHeading, robotHeight, intakeCapacity, isBlueAlliance, shooterDelay, shooterAngle, shooterHeight);
             this.shouldTurnTarget = shouldTurnToTarget;
+            this.throwTargetZ = (isBlueAlliance) ? FIELD_DEPTH_METERS - ALLIANCE_ZONE_DEPTH / 2f : ALLIANCE_ZONE_DEPTH / 2f;
         }
 
         @Override
@@ -979,16 +1005,45 @@ public class FRCGameRebuilt implements Game{
         /** Robot hendeklerin altından geçebilecek kadar kısa mı? */
         public boolean canGoUnderTheTrench(){ return height < TRENCH_STICK_H; }
 
+        //-------------------------------ZİNCİRLEME SETTERLAR-------------------------------
+        public RobotRebuilt setMaxShootSpeed(float speed){
+            if(!(speed > 0f)) throw new IllegalArgumentException("maxShootSpeed 0'dan büyük olmalı (m/s): " + speed);
+            this.maxShootSpeed = speed; return this;
+        }
+        /** @param angleSigmaDegrees yatay yön hatası (derece, 0 = hatasız) @param speedSigma hız hatası (oran, 0.01 = %1; 0 = hatasız) */
+        public RobotRebuilt setShootSpread(float angleSigmaDegrees, float speedSigma){
+            if(!(angleSigmaDegrees >= 0f) || !(speedSigma >= 0f)) throw new IllegalArgumentException("Sapma negatif olamaz");
+            this.shootAngleSigma = (float)Math.toRadians(angleSigmaDegrees);
+            this.shootSpeedSigma = speedSigma; return this;
+        }
+        public RobotRebuilt setShotClearance(float clearance){ this.shotClearance = Math.max(0f, clearance); return this; }
+        public RobotRebuilt setCanThrowToAllianceArea(boolean can){ this.canThrowToAllianceArea = can; return this; }
+        /** @param z ALLIANCE_THROW'un hedef z'si; kendi ittifak bölgesinde olmalı */
+        public RobotRebuilt setThrowTargetZ(float z){
+            boolean inOwnZone = (isBlueAlliance) ? z >= FIELD_DEPTH_METERS - ALLIANCE_ZONE_DEPTH && z <= FIELD_DEPTH_METERS : z >= 0f && z <= ALLIANCE_ZONE_DEPTH;
+            if(!inOwnZone) throw new IllegalArgumentException("Atma hedefi kendi ittifak bölgesinde olmalı: z=" + z);
+            this.throwTargetZ = z; return this;
+        }
+        public RobotRebuilt setCanShootMultiBall(boolean can){ this.canShootMultiBall = can; return this; }
+
         //--------------------------------------SHOOTER--------------------------------------
-        /** Namlunun robota göre azami top hızı (m/s). Hedef bunu gerektiriyorsa atış yapılamaz. */
-        public static final float MAX_SHOOT_SPEED = 12f;
-        /** Atış hatası: yatay yönde (radyan) ve hızda (oran) standart sapma. 0 = kusursuz nişan. Robota özel ayarlanabilir.
-         *  Rastgelelik dünyanın seed'li random'ından gelir (deterministik). */
+        public static final float DEFAULT_MAX_SHOOT_SPEED = 12f;
+        /** Hub'ın önündeki (x ekseninde hub'la aynı hizadaki) yasak bandın yarı genişliği (m): nötr bölgeden kendi alanına atma bu bandın
+         *  içindeyken yasak, çünkü top hub'a ve ağa çarpar. = ağın yarı genişliği + top yarıçapı + sapma payı. */
+        public static final float HUB_FRONT_BAND_HALF_WIDTH = 1.4419f / 2f + FuelBall.RADIUS + 0.05f;
+
+        /** Namlunun robota göre azami top hızı (m/s). Hedef bunu gerektiriyorsa atış yapılamaz: dolaylı olarak azami atış mesafesidir. */
+        public float maxShootSpeed = DEFAULT_MAX_SHOOT_SPEED;
+        /** Atış hatası: yatay yönde (radyan) ve hızda (oran) standart sapma. 0 = kusursuz nişan. Robota özel ayarlanabilir.*/
         public float shootAngleSigma = (float)Math.toRadians(0.5f);
-        public float shootSpeedSigma = 0.01f; //menzil ~ hız², yani %1 hız hatası ~%2 menzil hatası
+        public float shootSpeedSigma = 0.01f;
         /** canShootFrom'un engel testinde topun yarıçapına eklenen yatay güvenlik payı (m): atış hatası (sapma) yüzünden
          *  bir engelin (ağın kenarı, hub'ın kenarı) hemen yanından geçen sınırda atışlar "olur" sayılmasın. 0 = tam sınır. */
         public float shotClearance = 0.05f;
+        /** true: nötr bölgedeyken (hub'ın önündeki bant hariç) topları kendi ittifak bölgesine fırlatabilir. */
+        public boolean canThrowToAllianceArea = false;
+        /** ALLIANCE_THROW atışının hedef z'si (kendi ittifak bölgesinde). Varsayılan: ittifak bölgesinin tam ortası. */
+        public float throwTargetZ;
 
         private static final float SHOT_MIN_TIME  = 0.05f; //uçuş süresi taraması (s)
         private static final float SHOT_MAX_TIME  = 3.0f;
@@ -998,6 +1053,62 @@ public class FRCGameRebuilt implements Game{
 
         /** solveShot'un sonucu topun dünya hızı */
         private final com.badlogic.gdx.math.Vector3 shotVelocity = new com.badlogic.gdx.math.Vector3();
+
+        /** (x, z) konumunda bu robot hangi atışı kullanırdı? Sadece konuma ve robot ayarına bakar; intake, bekleme, menzil, engel hesaba katılmaz. */
+        public ShotMode getShotModeAt(float x, float z){
+            final float limit = getHubShootZoneLimitZ(isBlueAlliance);
+            if((isBlueAlliance) ? z >= limit : z <= limit) return ShotMode.HUB;
+
+            if(!canThrowToAllianceArea) return ShotMode.NONE;
+            //rakip ittifak bölgesi nötr bölge değil
+            if((isBlueAlliance) ? z <= ALLIANCE_ZONE_DEPTH : z >= FIELD_DEPTH_METERS - ALLIANCE_ZONE_DEPTH) return ShotMode.NONE;
+            //hub'ın hemen önü: atılan top hub'a/ağa çarpar
+            if(Math.abs(x - getHubCenterX()) < HUB_FRONT_BAND_HALF_WIDTH) return ShotMode.NONE;
+            return ShotMode.ALLIANCE_THROW;
+        }
+
+        /** Şu anki konumda atış tipi. */
+        public ShotMode getShotMode(){ return getShotModeAt(position.x, position.z); }
+
+        //son planlanan atış hedefi (planShot yazar)
+        private float planX, planY, planZ;
+
+        /** mode için (x, z) konumundaki robotun atış hedefini plan* alanlarına yazar. mode NONE olmamalı. */
+        private void planShot(ShotMode mode, float x, float z){
+            if(mode == ShotMode.HUB){
+                planX = getHubCenterX(); planY = HUB_H; planZ = getHubCenterZ(isBlueAlliance);
+            }else{ //ALLIANCE_THROW: aynı x, sabit z, zemin
+                planX = x; planY = 0f; planZ = throwTargetZ;
+            }
+        }
+
+        /** Şu anki konumdan atış yapılacaksa robotun bakması gereken yön (rad, 0 = +x, bkz. getHeadingError). Atış yoksa (NONE) NaN.
+         *  Hedefe dönmesi gereken robotlar (shouldTurnTarget) shoot() için bu yöne ~5° içinde bakmalıdır. */
+        public float getShotHeading(){
+            ShotMode mode = getShotMode();
+            if(mode == ShotMode.NONE) return Float.NaN;
+            planShot(mode, position.x, position.z);
+            return (float)Math.atan2(planZ - position.z, planX - position.x);
+        }
+
+        /** Robot şu an shoot() çağırılırsa top atılır mı? (mod, yön (gerekiyorsa), bekleme, intake, menzil) */
+        public boolean canShoot(){
+            ShotMode mode = getShotMode();
+            if(mode == ShotMode.NONE) return false;
+            planShot(mode, position.x, position.z);
+            return canShoot(planX, planY, planZ);
+        }
+
+        /** Bulunduğu yere göre tek atışı yapar: hub bölgesinde hub'a, nötr bölgede (canThrowToAllianceArea ise) kendi alanına atar.
+         *  Başka yerdeyken, yön tutmuyorsa (shouldTurnTarget), menzil yetmiyorsa, bekleme sürüyorsa ya da intake boşsa hiçbir şey yapmaz. */
+        @Override
+        public boolean shoot(){
+            ShotMode mode = getShotMode();
+            if(mode == ShotMode.NONE) return false;
+            planShot(mode, position.x, position.z);
+            //TODO 2. aşama: canShootMultiBall ise ön kenara paralel birkaç noktadan (fromX/fromZ) aynı anda çoklu atış
+            return shoot(planX, planY, planZ, position.x, position.y + shooterHeight, position.z);
+        }
 
         /**
          * Sabit atış açısıyla (shooterAngle) top, namludan (dx, dy, dz) kadar ötedeki hedefe İNERKEN ulaşsın diye gereken
@@ -1010,7 +1121,7 @@ public class FRCGameRebuilt implements Game{
          * vy = w·tan(açı). Hedef yüksekliğinde olma koşulu: tan·|D - vRobot·T| - g/2·(T² + DT·T) - dy = 0 (DT, fizik adımı:
          * dünyadaki yerçekimi yarı-örtük Euler olduğu için g·DT·T/2 kadarlık ayrık düzeltme). Tek köklü olmak zorunda olmadığından
          * T taranır, işaret değişimleri ikiye bölmeyle inceltilir; kökler arasından top HEDEFE İNERKEN gelen ve robota göre
-         * hızı MAX_SHOOT_SPEED'i aşmayan en yavaş atış seçilir.
+         * hızı maxShootSpeed'i aşmayan en yavaş atış seçilir.
          *
          * @return false: ulaşılamaz (çok uzak/yüksek, çok yakın, namlu hızı yetmez)
          */
@@ -1046,7 +1157,7 @@ public class FRCGameRebuilt implements Game{
                     float speed = w / cos;                              //robota göre toplam namlu hızı
 
                     //hedefe inerken gelmeli (yükselirken değil) ve namlu bu hızı verebilmeli
-                    if(vy - Physic3D.GRAVITY * T < 0f && speed <= MAX_SHOOT_SPEED && speed < bestSpeed){
+                    if(vy - Physic3D.GRAVITY * T < 0f && speed <= maxShootSpeed && speed < bestSpeed){
                         found = true;
                         bestSpeed = speed;
                         shotVelocity.set(dx / T, vy, dz / T);
@@ -1078,21 +1189,30 @@ public class FRCGameRebuilt implements Game{
             return solveShot(dx, targetY - (position.y + shooterHeight), dz);
         }
 
-        /** Planlama sorgusu (bot beyni için): robot (fromX, fromZ)'de zeminde DURURKEN hedefe atış yaparsa top hedefe ulaşır mı?
-         * Menzil, namlu hızı, hedefe inerek varma koşulu (canShoot ile aynı hesap) VE atış yolunun üzerindeki sabit engeller
-         * (file/ağ, kule, hendek...) dikkate alınır: top yolda bir engele çarparsa false. Bekleme süresi, mermi sayısı ve
-         * robotun şu anki yönü dikkate ALINMAZ (beyin oraya gidip hedefe döner). Robotun/topun durumunu değiştirmez.
+        /** Planlama sorgusu (bot beyni için): robot (x, z)'de zeminde DURURKEN, o konumdaki atış tipiyle (getShotModeAt) atış yaparsa top
+         * hedefine ulaşır mı? Atış tipinin izin vermesi (bölge, canThrowToAllianceArea, hub önü bandı), menzil, namlu hızı (maxShootSpeed),
+         * hedefe inerek varma koşulu (shoot ile aynı hesap) VE atış yolunun üzerindeki sabit engeller (file/ağ, kule, hendek...) dikkate
+         * alınır: top yolda bir engele çarparsa false. Bekleme süresi, mermi sayısı ve robotun şu anki yönü dikkate ALINMAZ
+         * (beyin oraya gidip hedefe döner). Robotun/topun durumunu değiştirmez.
          * Not: gerçek atış (shoot) engele çarpmayı fizikte yaşar; bu sorgu sadece atışa gitmeden önce bilmek içindir.
          */
-        public boolean canShootFrom(float fromX, float fromZ, float targetX, float targetY, float targetZ){
+        public boolean canShootFrom(float x, float z){
+            ShotMode mode = getShotModeAt(x, z);
+            if(mode == ShotMode.NONE) return false;
+            planShot(mode, x, z);
             final float muzzleY = shooterHeight; //robot zeminde: namlunun (topun tabanı) yüksekliği
-            if(!solveShot(targetX - fromX, targetY - muzzleY, targetZ - fromZ, 0f, 0f)) return false;
-            return !isShotObstructed(fromX, muzzleY, fromZ, shotVelocity.x, shotVelocity.y, shotVelocity.z, targetY);
+            if(!solveShot(planX - x, planY - muzzleY, planZ - z, 0f, 0f)) return false;
+            return !isShotObstructed(x, muzzleY, z, shotVelocity.x, shotVelocity.y, shotVelocity.z, planY);
         }
 
-        /** canShootFrom'un kendi ittifakının hub'ına (hub'ın tepesinin ortası) puan atışı hâli. */
-        public boolean canScoreFrom(float fromX, float fromZ){
-            return canShootFrom(fromX, fromZ, getHubCenterX(), HUB_H, getHubCenterZ(isBlueAlliance));
+        /** canShootFrom'un sadece hub puan atışı olan hâli: (x, z) hub atış bölgesinde ve oradan hub'a atış yapılabiliyor mu? */
+        public boolean canScoreFrom(float x, float z){
+            return getShotModeAt(x, z) == ShotMode.HUB && canShootFrom(x, z);
+        }
+
+        /** canShootFrom'un sadece alanına atma (ALLIANCE_THROW) olan hâli. */
+        public boolean canThrowFrom(float x, float z){
+            return getShotModeAt(x, z) == ShotMode.ALLIANCE_THROW && canShootFrom(x, z);
         }
 
         /** Top (x0, y0, z0)'dan v hızıyla çıkıp hedef yüksekliğine (targetY) İNENE kadar sabit bir engele çarpar mı?
@@ -1130,7 +1250,7 @@ public class FRCGameRebuilt implements Game{
         }
 
         @Override
-        protected boolean launch(float dx, float dy, float dz){
+        protected boolean launch(float dx, float dy, float dz, float fromX, float fromY, float fromZ){
             if(world == null || intakeCount <= 0) return false;
             if(!solveShot(dx, dy, dz)) return false;
 
@@ -1151,7 +1271,7 @@ public class FRCGameRebuilt implements Game{
 
             FuelBall ball = (FuelBall)stored[--intakeCount];
             stored[intakeCount] = null;
-            ball.respawn(position.x, position.y + shooterHeight, position.z, vx, vy, vz);
+            ball.respawn(fromX, fromY, fromZ, vx, vy, vz);
             world.addEntity(ball);
             return true;
         }

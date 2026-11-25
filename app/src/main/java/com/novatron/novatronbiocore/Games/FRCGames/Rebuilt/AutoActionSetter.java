@@ -40,7 +40,7 @@ public final class AutoActionSetter{
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,1f));
         //hub'a intake boşalana kadar atış yap
-        actions.addAutoTask(new AutoActions.Shoot(4.026f, 1.83f, 4.625f));
+        actions.addAutoTask(new AutoActions.Shoot());
         //ortaya git
         actions.addAutoTask(new AutoActions.ParallelActions(
                 new AutoActions.TurnToAngle((float)Math.toRadians(180)),
@@ -55,7 +55,7 @@ public final class AutoActionSetter{
         //tüm topları kendi bölgene atmaya çalış
         actions.addAutoTask(new AutoActions.ParallelActions(
                 new AutoActions.DriveToPosition(0.90f, 8.05f, 2.5f, false),
-                new AutoActions.Shoot(robot.getIntakeCapacity()*2, 6.85f, 0, 3.10f)
+                new AutoActions.Shoot(10202)
         ));
     }
 
@@ -84,7 +84,7 @@ public final class AutoActionSetter{
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.3f));
         //hub'a intake boşalana kadar atış yap
-        actions.addAutoTask(new AutoActions.Shoot(4.026f, 1.83f, 4.625f));
+        actions.addAutoTask(new AutoActions.Shoot());
     }
 
     public static void setRobot3Autonomous(@NonNull Physic3D.Robot robot){
@@ -111,7 +111,7 @@ public final class AutoActionSetter{
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.5f));
         //hub'a intake boşalana kadar atış yap
-        actions.addAutoTask(new AutoActions.Shoot(4.026f, 1.83f, 4.625f));
+        actions.addAutoTask(new AutoActions.Shoot());
         //geri ortaya git
         actions.addAutoTask(new AutoActions.ParallelActions(
                 new AutoActions.DriveBezierCurve(2f, false,
@@ -136,7 +136,7 @@ public final class AutoActionSetter{
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.3f));
         //hub'a intake boşalana kadar atış yap
-        actions.addAutoTask(new AutoActions.Shoot(4.026f, 1.83f, 4.625f));
+        actions.addAutoTask(new AutoActions.Shoot());
     }
 
     //----------------------------------MAVİ İTTİFAK----------------------------------
@@ -164,7 +164,7 @@ public final class AutoActionSetter{
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.1f));
         //hub'a intake boşalana kadar atış yap
-        actions.addAutoTask(new AutoActions.Shoot(4.026f, 1.83f, 11.815f));
+        actions.addAutoTask(new AutoActions.Shoot());
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true, 1f));
         //ortaya git
@@ -190,7 +190,7 @@ public final class AutoActionSetter{
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.1f));
         //hub'a intake boşalana kadar atış yap
-        actions.addAutoTask(new AutoActions.Shoot(4.026f, 1.83f, 11.815f));
+        actions.addAutoTask(new AutoActions.Shoot());
     }
 
     public static void setRobot5Autonomous(@NonNull Physic3D.Robot robot){
@@ -219,7 +219,7 @@ public final class AutoActionSetter{
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.5f));
         //hub'a intake boşalana kadar atış yap
-        actions.addAutoTask(new AutoActions.Shoot(4.026f, 1.83f, 11.815f));
+        actions.addAutoTask(new AutoActions.Shoot());
     }
 
     public static void setRobot6Autonomous(@NonNull Physic3D.Robot robot){
@@ -242,7 +242,7 @@ public final class AutoActionSetter{
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.05f));
         //hub'a intake boşalana kadar atış yap
-        actions.addAutoTask(new AutoActions.Shoot(4.026f, 1.83f, 11.815f));
+        actions.addAutoTask(new AutoActions.Shoot());
         //depoya git
         actions.addAutoTask(new AutoActions.ParallelActions(
                 new AutoActions.WithTimeout(new AutoActions.DriveToPosition(0.60f, FRCGameRebuilt.FIELD_DEPTH_METERS-Physic3D.Robot.ROBOT_SIZE/2f, 3f, false), 1.5f),
@@ -252,7 +252,7 @@ public final class AutoActionSetter{
         actions.addAutoTask(new AutoActions.ParallelActionsWithMain(
                 new AutoActions.DriveToPosition(3.20f, FRCGameRebuilt.FIELD_DEPTH_METERS-Physic3D.Robot.ROBOT_SIZE/2f, 1.5f, false),
                 new AutoActions.IntakeUntilFull(),
-                new AutoActions.Shoot(robot.getIntakeCapacity(), 4.026f, 1.83f, 11.815f)
+                new AutoActions.Shoot(robot.getIntakeCapacity())
         ));
     }
 }

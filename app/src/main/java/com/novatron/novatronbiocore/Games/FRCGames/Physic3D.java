@@ -1215,7 +1215,7 @@ public class Physic3D{
         /** Robotun shooter'ının topu atma açısı. Sabit. Radian cinsinden */
         public final float shooterAngle;
         /** Robotun shooter'ı robot'tun ne kadar üstünde? */
-        public final float shooterHeight;
+        public float shooterHeight;
         private float shooterDelayCounter;
 
         public final boolean isBlueAlliance;
@@ -1516,16 +1516,15 @@ public class Physic3D{
 
         //----------------------------------SHOOTER MANTIĞI----------------------------------
 
-        public boolean shoot(float targetX, float targetY, float targetZ){
+        //dışarıdan çağırılacak
+        public abstract boolean shoot();
+
+        protected boolean shoot(float targetX, float targetY, float targetZ, float fromX, float fromY, float fromZ){
             //atış yapılamaz
             if(!canShoot(targetX, targetY, targetZ)) return false;
 
-            float dx = targetX - position.x;
-            float dy = targetY - (position.y + shooterHeight);
-            float dz = targetZ - position.z;
-
             //atış yap
-            boolean isShootSuccessful = launch(dx, dy, dz);
+            boolean isShootSuccessful = launch(targetX - fromX, targetY - fromY, targetZ - fromZ, fromX, fromY, fromZ);
 
             //atış başarılı ise bekleme başlasın
             if(isShootSuccessful) shooterDelayCounter = shooterDelay;
@@ -1597,11 +1596,11 @@ public class Physic3D{
         /** Bu robotun intake'ine aldığı yakıtlardan mı? Her sezon yakıt değişiyor. */
         @SuppressWarnings("BooleanMethodIsAlwaysInverted")
         public abstract boolean isTargetFuel(PhysicsEntity e);
-        /** shoot metodunun içinde çağırılır. Sezona özel yakıtın fırlatılma şekli değişebilir.
+        /** Shoot metodunun içinde çağırılır. Sezona özel yakıtın fırlatılma şekli değişebilir.
          * atış beklemesi shoot'un içinde hallediliyor, sadece top nasıl fırlatılacak.
          * @return fırlatma başarılı mı?
          */
-        protected abstract boolean launch(float dx, float dy, float dz);
+        protected abstract boolean launch(float dx, float dy, float dz, float fromX, float fromY, float fromZ);
 
         public abstract float getFuelHalfSize();
 

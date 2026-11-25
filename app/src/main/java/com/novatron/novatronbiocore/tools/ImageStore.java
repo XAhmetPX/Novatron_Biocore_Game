@@ -102,6 +102,13 @@ public class ImageStore{
         drawScaledPixelImage(canvas, ID, centerX - width/2f, centerY - height/2, width, height);
     }
 
+    public void drawScaledPixelImageWithCenterAndRotate(Canvas canvas, int ID, float centerX, float centerY, float width, float height, float degrees){
+        canvas.save();
+        canvas.rotate(degrees, centerX, centerY);
+        drawScaledPixelImageWithCenter(canvas, ID, centerX, centerY, width, height);
+        canvas.restore();
+    }
+
     public void drawScaledPixelImageWithAlpha(Canvas canvas, int ID, int x, int y, int width, int height, int alpha){
         pixelArtPaint.setAlpha(alpha);
         drawScaledPixelImage(canvas, ID, x, y, width, height);

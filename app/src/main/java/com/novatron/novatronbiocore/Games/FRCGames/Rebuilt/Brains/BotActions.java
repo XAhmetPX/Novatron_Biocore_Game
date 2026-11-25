@@ -17,7 +17,7 @@ public final class BotActions{
 
     private BotActions(){}
 
-    public enum Result{ RUNNING, FULL, NO_FUEL, TIMEOUT}
+    public enum Result{ RUNNING, FULL, NO_FUEL, TIMEOUT, DONE, NO_SHOT }
 
     public static class CollectFuel implements AutoAction{
         private static final float BALL_MOVED_REPLAN = 0.4f;  //hedef top bu kadar kaydıysa yeniden git
@@ -172,6 +172,75 @@ public final class BotActions{
                 best = (FuelBall) e;
             }
             return best;
+        }
+    }
+
+    public static class AimAndShoot implements AutoAction{
+
+        /** Top çıkıştan hub'a inene kadar geçen süre ~1 sn: hub bundan önce kapanacaksa ateş etme. */
+        public static final float FLIGHT_MARGIN = 1.1f;
+
+        private final boolean holdFireWhenInactive;
+        private final float maxSeconds;
+
+        private RobotRebuilt robot;
+        private float time;
+        private int shots;
+        private Result result;
+
+        public AimAndShoot(boolean holdFireWhenInactive, float maxSeconds){
+            this.holdFireWhenInactive = holdFireWhenInactive;
+            this.maxSeconds = maxSeconds;
+        }
+
+        public Result getResult(){ return result; }
+        public int getShots(){ return shots; }
+
+        @Override
+        public void start(@NonNull Physic3D.Robot r){
+            robot = (RobotRebuilt)r;
+            robot.intakeActive = false;
+            time = 0f; shots = 0;
+            result = Result.RUNNING;
+        }
+
+        @Override
+        public boolean execute(@NonNull Physic3D.Robot r, float dt){
+            if(robot.getIntakeCount() == 0){ //atılacak yakıt yok
+                result = Result.DONE; return true;
+            }
+
+            //süre aşımı
+            time += dt;
+            if(time > maxSeconds){
+                result = Result.TIMEOUT; return true;
+            }
+
+            //atış yoksa bitir
+            final FRCGameRebuilt.ShotMode mode = robot.getShotMode();
+            if(mode == FRCGameRebuilt.ShotMode.NONE){
+                result = Result.NO_SHOT; return true;
+            }
+
+            //sabit dur
+            robot.setInputXZ(0f, 0f);
+
+            //gerekiyorsa hedefe dön
+            if(robot.shouldTurnTarget)
+                robot.setTargetHeading(robot.getShotHeading());
+
+            //hub'ın açılmasına az kalmışsa bekle
+            if(mode == FRCGameRebuilt.ShotMode.HUB && holdFireWhenInactive
+                    && robot.game.getSecondsHubActiveRemaining(robot.isBlueAlliance) < FLIGHT_MARGIN)
+                return false;
+
+            if(robot.shoot()) shots++;
+            return false;
+        }
+
+        @Override
+        public void end(@NonNull Physic3D.Robot r){
+            robot.setTargetHeading(Physic3D.Robot.NO_TURN);
         }
     }
 
