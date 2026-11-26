@@ -79,8 +79,11 @@ public final class AutoActionSetter{
                 5.45f, 0.50f,
                 5.10f, 2.0f,
                 3.90f, 2.45f));
-        if(((FRCGameRebuilt.RobotRebuilt)robot).shouldTurnTarget) //gerekiyorsa hedefe dön
-            actions.addAutoTask(new AutoActions.TurnToPoint(4f, 4.6f));
+        //gerekiyorsa hedefe dön
+        actions.addAutoTask(new AutoActions.WithCondition(
+                ((rob, dt) -> !((FRCGameRebuilt.RobotRebuilt) rob).shouldTurnTarget()),
+                new AutoActions.TurnToPoint(4f, 4.6f)
+        ));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.3f));
         //hub'a intake boşalana kadar atış yap
@@ -106,8 +109,11 @@ public final class AutoActionSetter{
         actions.addAutoTask(new AutoActions.WaitTimeout(true, 0.2f));
         //geri git
         actions.addAutoTask(new AutoActions.DriveToPosition(2.40f, 2.60f, 3f, false));
-        if(((FRCGameRebuilt.RobotRebuilt)robot).shouldTurnTarget) //gerekiyorsa hedefe dön
-            actions.addAutoTask(new AutoActions.TurnToPoint(4f, 4.6f));
+        //gerekiyorsa hedefe dön
+        actions.addAutoTask(new AutoActions.WithCondition(
+                ((rob, dt) -> !((FRCGameRebuilt.RobotRebuilt) rob).shouldTurnTarget()),
+                new AutoActions.TurnToPoint(4f, 4.6f)
+        ));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.5f));
         //hub'a intake boşalana kadar atış yap
@@ -131,8 +137,11 @@ public final class AutoActionSetter{
                 2.50f, 6.20f,
                 2.40f, 4.00f,
                 1.90f, 2.40f));
-        if(((FRCGameRebuilt.RobotRebuilt)robot).shouldTurnTarget) //gerekiyorsa hedefe dön
-            actions.addAutoTask(new AutoActions.TurnToPoint(4f, 4.6f));
+        //gerekiyorsa hedefe dön
+        actions.addAutoTask(new AutoActions.WithCondition(
+                ((rob, dt) -> !((FRCGameRebuilt.RobotRebuilt) rob).shouldTurnTarget()),
+                new AutoActions.TurnToPoint(4f, 4.6f)
+        ));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.3f));
         //hub'a intake boşalana kadar atış yap
@@ -159,8 +168,11 @@ public final class AutoActionSetter{
                 7.70f, 9.85f,
                 7.85f, 11.60f,
                 7.20f, 13.25f));
-        if(((FRCGameRebuilt.RobotRebuilt)robot).shouldTurnTarget) //gerekiyorsa hedefe dön
-            actions.addAutoTask(new AutoActions.TurnToPoint(4f, 11.815f));
+        //gerekiyorsa hedefe dön
+        actions.addAutoTask(new AutoActions.WithCondition(
+                ((rob, dt) -> !((FRCGameRebuilt.RobotRebuilt) rob).shouldTurnTarget()),
+                new AutoActions.TurnToPoint(4f, 11.815f)
+        ));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.1f));
         //hub'a intake boşalana kadar atış yap
@@ -185,8 +197,11 @@ public final class AutoActionSetter{
                 3.90f, 8.80f,
                 2.30f, 9.90f,
                 2.40f, 13.75f));
-        if(((FRCGameRebuilt.RobotRebuilt)robot).shouldTurnTarget) //gerekiyorsa hedefe dön
-            actions.addAutoTask(new AutoActions.TurnToPoint(4f, 11.815f));
+        //gerekiyorsa hedefe dön
+        actions.addAutoTask(new AutoActions.WithCondition(
+                ((rob, dt) -> !((FRCGameRebuilt.RobotRebuilt) rob).shouldTurnTarget()),
+                new AutoActions.TurnToPoint(4f, 11.815f)
+        ));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.1f));
         //hub'a intake boşalana kadar atış yap
@@ -214,8 +229,11 @@ public final class AutoActionSetter{
                 5.00f, 10.20f,
                 5.95f, 12.10f,
                 5.40f, 13.70f));
-        if(((FRCGameRebuilt.RobotRebuilt)robot).shouldTurnTarget) //gerekiyorsa hedefe dön
-            actions.addAutoTask(new AutoActions.TurnToPoint(4f, 11.815f));
+        //gerekiyorsa hedefe dön
+        actions.addAutoTask(new AutoActions.WithCondition(
+                ((rob, dt) -> !((FRCGameRebuilt.RobotRebuilt) rob).shouldTurnTarget()),
+                new AutoActions.TurnToPoint(4f, 11.815f)
+        ));
         //biraz bekle
         actions.addAutoTask(new AutoActions.WaitTimeout(true,0.5f));
         //hub'a intake boşalana kadar atış yap

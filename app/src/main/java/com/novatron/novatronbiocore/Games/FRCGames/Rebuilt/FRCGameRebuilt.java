@@ -191,8 +191,11 @@ public class FRCGameRebuilt implements Game{
             playerRobot.setInputs(inputX, inputZ, targetHeading);
             playerRobot.intakeActive = intakeOn;
 
-            if(shootOn)
+            if(shootOn){
+                if(playerRobot.shouldTurnTarget())
+                    playerRobot.setTargetHeading(playerRobot.getShotHeading());
                 playerRobot.shoot();
+            }
         }
 
         for(int i = 0; i < physic.entities.size(); i++)
@@ -416,24 +419,30 @@ public class FRCGameRebuilt implements Game{
         //-----------------------------------KIRMIZI İTTİFAK-----------------------------------
         /**/
         addRobot(new RobotRebuilt(7.4f, 0f, RED_ALLIANCE_Z, (float) Math.toRadians(180), 0.4f, 30,  false,
-                0.3f, 58f, 0.41f, false).setCanThrowToAllianceArea(true).setAutoScript(AutoActionSetter::setRobot1Autonomous));
+                0.3f, 58f, 0.41f).setCanThrowToAllianceArea(true).setAutoScript(AutoActionSetter::setRobot1Autonomous));
         /**/
         addRobot(new RobotRebuilt(4.1f, 0f, RED_ALLIANCE_Z, (float) Math.toRadians(180), 0.64f, 35,  false,
-                0.2f, 60f, 0.69f, true).setAutoScript(AutoActionSetter::setRobot2Autonomous));
-        /**/
+                0.2f, 60f, 0.69f).setAutoScript(AutoActionSetter::setRobot2Autonomous).setMaxShooterRotateAngle((float)Math.toRadians(5)));
+        /* 10202'nin (bizim takımın) robotu */
         this.playerRobot = addRobot(new RobotRebuilt(2.7f, 0f, RED_ALLIANCE_Z, (float) Math.toRadians(0), 0.62f, 45, false,
-                0.08f, 65f, 0.64f, true).setAutoScript(AutoActionSetter::setRobot3Autonomous));
+                0.09f, 65f, 0.64f).setAutoScript(AutoActionSetter::setRobot3Autonomous)
+                .setShooterPositionFromCenter(0.3f, 0f)
+                .setCanThrowToAllianceArea(true)
+                .setMaxShooterRotateAngle((float)Math.toRadians(90)));
 
         //-------------------------------------MAVİ İTTİFAK-------------------------------------
         /**/
         addRobot(new RobotRebuilt(7.4f, 0f, BLUE_ALLIANCE_Z, (float) Math.toRadians(180), 0.55f, 35,  true,
-                0.15f, 62f, 0.57f, true).setAutoScript(AutoActionSetter::setRobot4Autonomous));
+                0.15f, 62f, 0.57f).setAutoScript(AutoActionSetter::setRobot4Autonomous)
+                .setCanShootMultiBall(true)
+                .setMaxShooterRotateAngle((float)Math.toRadians(5)));
         /**/
         addRobot(new RobotRebuilt(5.8f, 0f, BLUE_ALLIANCE_Z, (float) Math.toRadians(270), 0.4f, 25,  true,
-                0.25f, 60f, 0.41f, true).setAutoScript(AutoActionSetter::setRobot5Autonomous));
+                0.25f, 60f, 0.41f).setAutoScript(AutoActionSetter::setRobot5Autonomous)
+                .setMaxShooterRotateAngle((float)Math.toRadians(5)));
         /**/
         addRobot(new RobotRebuilt(0.7f, 0f, BLUE_ALLIANCE_Z, (float) Math.toRadians(0), 0.54f, 40,  true,
-                0.09f, 60f, 0.59f, false).setAutoScript(AutoActionSetter::setRobot6Autonomous));
+                0.09f, 60f, 0.59f).setAutoScript(AutoActionSetter::setRobot6Autonomous));
 
         //-------------------------------------YAKIT TOPLAR------------------------------------
 
@@ -641,7 +650,49 @@ public class FRCGameRebuilt implements Game{
                 : TRENCH_STICK_W + TRENCH_BODY_W + BUMP_W/2f;
 
         physic.addEntity(new Physic3D.Obstacle(startX, -BUMP_H/2f, startZ, 0,
-                BUMP_W, BUMP_H, BUMP_D, viewport, gp.ui.fontDebug).setSensor(true));
+                BUMP_W, BUMP_H, BUMP_D, viewport, gp.ui.fontDebug){
+
+            private static final float ANGLE_DEGREES = 20f;       //rampa eğimi
+            private static final float BALL_ROLL_FACTOR = 5f / 7f; //yuvarlanan dolu küre
+            private static final float BALL_SLOPE_FRICTION = 0.3f; //rampada top sürtünmesi (m/s²)
+            //g * sin * cos
+            private final float slopeAccel = Physic3D.GRAVITY * 0.5f * (float)Math.sin(Math.toRadians(2f * ANGLE_DEGREES));
+
+            {
+                entityStayListener = (e) -> {
+                    if(e instanceof Physic3D.Ball) applyToBall((Physic3D.Ball)e);
+                };
+            }
+
+            private void applyToBall(Physic3D.Ball ball){
+                if(ball.position.y > 0f || ball.velocity.y > 0f) return; //havadaki topa eğim etkimez
+                final float a = slopeAccel * BALL_ROLL_FACTOR * share(ball, ball.getRadius());
+                if(a == 0f) return;
+
+                ball.velocity.z += a * DT;
+                //Ball.update zemin sürtünmesini uygulayacak: rampada fazla gelen kısmı önden geri ver
+                final float speed = (float)Math.hypot(ball.velocity.x, ball.velocity.z);
+                if(speed <= 0f) return;
+                final float extra = Math.max(0f, ball.getGroundFriction() - BALL_SLOPE_FRICTION) * DT;
+                final float scale = (speed + extra) / speed;
+                ball.velocity.x *= scale;
+                ball.velocity.z *= scale;
+            }
+
+            /** -1..1: cismin bastığı alanın iki rampaya dağılımı (+ ise yokuş aşağı +z yönü) */
+            private float share(Physic3D.PhysicsEntity e, float half){
+                final float x = e.position.x, z = e.position.z;
+                final float onWidth = overlap(x - half, x + half, position.x - width / 2f, position.x + width / 2f);
+                final float onLowZ  = overlap(z - half, z + half, position.z - depth / 2f, position.z);
+                final float onHighZ = overlap(z - half, z + half, position.z, position.z + depth / 2f);
+                return (onWidth / (2f * half)) * ((onHighZ - onLowZ) / (2f * half));
+            }
+
+            private float overlap(float aMin, float aMax, float bMin, float bMax){
+                return Math.max(0f, Math.min(aMax, bMax) - Math.max(aMin, bMin));
+            }
+
+        }.setSensor(true));
     }
     private void addTower(boolean isRedAlliance){
         float startZ = (isRedAlliance) ? TOWER_Z_OFFSET : FIELD_DEPTH_METERS - TOWER_Z_OFFSET;
@@ -941,14 +992,21 @@ public class FRCGameRebuilt implements Game{
         private final ArrayList<FuelBall> landedOnTop = new ArrayList<>(); //burada tanımlamamın sebebi, robotlar her sezon yukarıdan yakıt alamayacak
 
         //----------------------------SHOOTER----------------------------
-        /** Robot top fırlatmak için hedefe dönmek zorunda mı? */
-        public final boolean shouldTurnTarget;
+        /** Robot'un shooter'ı ne kadar dönebilir (radyan cinsinden)? Varsayılan 360 derece*/
+        private float shooterMaxTurn = (float)(360 * Math.PI / 180f);
         /** Robotun shooter'ı robot'tun ne kadar üstünde? */
         public float shooterHeight;
         /** Robot merkezi orijin olacak şekilde robot shooter'ının konumu */
         protected float shooterOffsetX = 0f, shooterOffsetZ = 0f;
         /** Tek bir atışta çoklu atabilir mi? */
         public boolean canShootMultiBall = false;
+        /** Çoklu atışta bir salvoda en fazla kaç top çıkar (her atışta 1 ile bu sayı arası rastgele; intake'teki top sayısıyla da sınırlı). */
+        public int maxMultiBallCount = 3;
+        /** Çoklu atışta yan yana çıkan iki topun KENARLARI arasındaki en az boşluk (m). Fazlası rastgele. */
+        public float multiBallMinGap = 0.03f;
+        /** Çoklu atışta topların shooter hattından (ortadan) sağa/sola kayabileceği toplam genişlik (m): toplar bu genişlik içindeki
+         *  rastgele konumlardan, aralarında en az multiBallMinGap kalacak şekilde çıkar. Varsayılan: robotun genişliği - top çapı. */
+        public float multiBallSpreadWidth = ROBOT_SIZE - 2f * FuelBall.RADIUS;
         /** Namlunun robota göre azami top hızı (m/s). Hedef bunu gerektiriyorsa atış yapılamaz: dolaylı olarak azami atış mesafesidir. */
         public float maxShootSpeed = DEFAULT_MAX_SHOOT_SPEED;
         /** Atış hatası: yatay yönde (radyan) ve hızda (oran) standart sapma. 0 = kusursuz nişan. Robota özel ayarlanabilir.*/
@@ -968,12 +1026,11 @@ public class FRCGameRebuilt implements Game{
         public RobotBrain brain;
 
         public RobotRebuilt(float startX, float startY, float startZ, float startHeading, float robotHeight, int intakeCapacity, boolean isBlueAlliance,
-                            float shooterDelay, float shooterAngle, float shooterHeight, boolean shouldTurnToTarget){
+                            float shooterDelay, float shooterAngle, float shooterHeight){
             super(startX, startY, startZ, startHeading, robotHeight, intakeCapacity, isBlueAlliance, shooterDelay, shooterAngle);
             if(shooterHeight + 0.02f < robotHeight)
                 throw new IllegalArgumentException("Shooter robotan yukarıda olmalı: "+shooterHeight);
             this.shooterHeight = shooterHeight;
-            this.shouldTurnTarget = shouldTurnToTarget;
             this.throwTargetZ = (isBlueAlliance) ? FIELD_DEPTH_METERS - ALLIANCE_ZONE_DEPTH / 2f : ALLIANCE_ZONE_DEPTH / 2f;
         }
 
@@ -1061,7 +1118,10 @@ public class FRCGameRebuilt implements Game{
             if(!inOwnZone) throw new IllegalArgumentException("Atma hedefi kendi ittifak bölgesinde olmalı: z=" + z);
             this.throwTargetZ = z; return this;
         }
-        public RobotRebuilt setCanShootMultiBall(boolean can){ this.canShootMultiBall = can; return this; }
+        public RobotRebuilt setCanShootMultiBall(boolean can){
+            canShootMultiBall = can;
+            return setMaxShooterRotateAngle((float)Math.toRadians(5f)); //en fazla 5 derece açı farkı
+        }
         /** Shooter'ı robotun üzerinde başka bir yere taşır (varsayılan: (0, 0)). Konum, ROBOT MERKEZİ orijin alınarak verilir:
          *  x ve z -ROBOT_SIZE/2 .. ROBOT_SIZE/2 aralığında. Eksenler: x robotun ön yönü, z ön yönün 90° ilerisi (heading 0'da dünya +x ve +z). */
         public RobotRebuilt setShooterPositionFromCenter(float x, float z){
@@ -1072,6 +1132,8 @@ public class FRCGameRebuilt implements Game{
             this.shooterOffsetZ = z;
             return this;
         }
+        /** Robot atış yapabilmek için hedefe ile mutlak değer olarak en fazla kaç derece açı fark yapabilir? */
+        public RobotRebuilt setMaxShooterRotateAngle(float radian){ shooterMaxTurn = radian; return this; }
 
         //--------------------------------------SHOOTER--------------------------------------
 
@@ -1101,6 +1163,13 @@ public class FRCGameRebuilt implements Game{
         public float getShooterWorldZ(){ return getShooterWorldZ(shooterOffsetX, shooterOffsetZ); }
         /** Shooter'ın dünya y'si (topun çıkış tabanı): robot zemindeki konumu + shooterHeight. */
         public float getShooterWorldY(){ return position.y + shooterHeight; }
+
+        /** Robot'un shooter'ı bu konumda atış atılacak yöne dönebilir mi, yoksa robotu döndürmek mi lazım? */
+        public boolean shouldTurnTarget(){
+            float shotHeading = getShotHeading();
+            if(Float.isNaN(shotHeading)) return false; //atış yok (ShotMode.NONE), dönmeye gerek yok
+            return Math.abs(getHeadingError(shotHeading)) > shooterMaxTurn;
+        }
 
         private float throwHeading(){ return (isBlueAlliance) ? (float)(Math.PI / 2f) : -(float)(Math.PI / 2f); }
 
@@ -1148,8 +1217,7 @@ public class FRCGameRebuilt implements Game{
             }
         }
 
-        /** Şu anki konumdan atış yapılacaksa robotun bakması gereken yön (rad, 0 = +x, bkz. getHeadingError). Atış yoksa (NONE) NaN.
-         *  Hedefe dönmesi gereken robotlar (shouldTurnTarget) shoot() için bu yöne ~5° içinde bakmalıdır. */
+        /** Şu anki konumdan atış yapılacaksa robotun bakması gereken yön (rad, 0 = +x, bkz. getHeadingError). Atış yoksa (NONE) NaN. */
         public float getShotHeading(){
             ShotMode mode = getShotMode();
             if(mode == ShotMode.NONE) return Float.NaN;
@@ -1183,7 +1251,7 @@ public class FRCGameRebuilt implements Game{
             ShotMode mode = getShotMode();
             if(mode == ShotMode.NONE) return false;
             aimNow(mode);
-            //TODO 2. aşama: canShootMultiBall ise shooter'ı yerelde sağa/sola kaydırıp (getShooterWorldX/Z(localX, localZ)) birkaç noktadan aynı anda çoklu atış
+
             return shoot(planX, planY, planZ, fromX, getShooterWorldY(), fromZ);
         }
 
@@ -1258,10 +1326,10 @@ public class FRCGameRebuilt implements Game{
             float dx = targetX - fromX;
             float dz = targetZ - fromZ;
 
-            if(shouldTurnTarget){ //robotun hedefe dönmesi gerekiyorsa: shooter'dan hedefe olan yöne bakmalı
-                float targetAngle = (float)Math.atan2(dz, dx);
-                if(Math.abs(getHeadingError(targetAngle)) > SHOT_MAX_ANGLE_ERR) return false;
-            }
+            //shooter oraya dönebiliyor mu?
+            float targetAngle = (float)Math.atan2(dz, dx);
+            if(Math.abs(getHeadingError(targetAngle)) > shooterMaxTurn) return false;
+
             return solveShot(dx, targetY - fromY, dz);
         }
 
@@ -1345,9 +1413,48 @@ public class FRCGameRebuilt implements Game{
                 vx *= k; vy *= k; vz *= k;
             }
 
+            if(!canShootMultiBall) return respawnBallInIntake(fromX, fromY, fromZ, vx, vy, vz);
+
+            shootMultiBall(vx, vy, vz);
+            return true;
+        }
+
+        /** Birden çok topu paralel bir şekilde fırlatır. */
+        private void shootMultiBall(float vx, float vy, float vz){
+            final float fromY = getShooterWorldY();
+            final float[] offsets = pickMultiBallOffsets();
+            for (float offset : offsets) {
+                final float lx = shooterOffsetX;
+                if(!respawnBallInIntake(getShooterWorldX(lx, offset), fromY, getShooterWorldZ(lx, offset), vx, vy, vz))
+                    break;
+            }
+        }
+        /** Bu salvonun top sayısını (1..maxMultiBallCount; intake'teki top ve genişliğe sığan top sayısıyla sınırlı) rastgele seçer ve her
+         *  topun shooter hattından yan kaymasını (yerel z, m, küçükten büyüğe) verir: kayma [-W/2, W/2] içinde rastgele, komşu toplar
+         *  arası merkez mesafesi en az 2R + multiBallMinGap. */
+        private float[] pickMultiBallOffsets(){
+            final float spacing = 2f * FuelBall.RADIUS + multiBallMinGap;
+            final float width = multiBallSpreadWidth;
+            final int fit = (width <= 0f) ? 1 : (int)Math.floor(width / spacing + 1e-4f) + 1; //genişliğe en fazla kaç top sığar
+            final int max = Math.max(1, Math.min(maxMultiBallCount, Math.min(intakeCount, fit)));
+            final int n = 1 + world.random.nextInt(max);
+
+            //n rastgele sayı [0, L] içinde seçilip sıralanır, i. sayıya i*spacing eklenir: aralar en az spacing, fazlası rastgele
+            final float L = Math.max(0f, width - (n - 1) * spacing);
+            final float[] u = new float[n];
+            for(int i = 0; i < n; i++) u[i] = world.random.nextFloat() * L;
+            java.util.Arrays.sort(u);
+            for(int i = 0; i < n; i++) u[i] = -width / 2f + u[i] + i * spacing;
+            return u;
+        }
+
+        /** Topu verilen değerler ile intake'ten çıkarıp dünyaya koyar. Eğer Intake'te
+         * top kalmadıysa false döndürür. */
+        private boolean respawnBallInIntake(float x, float y, float z, float vx, float vy, float vz){
+            if(intakeCount - 1 < 0) return false; //hiç top kalmadı
             FuelBall ball = (FuelBall)stored[--intakeCount];
             stored[intakeCount] = null;
-            ball.respawn(fromX, fromY, fromZ, vx, vy, vz);
+            ball.respawn(x, y, z, vx, vy, vz);
             world.addEntity(ball);
             return true;
         }

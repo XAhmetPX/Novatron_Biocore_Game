@@ -226,7 +226,7 @@ public final class BotActions{
             robot.setInputXZ(0f, 0f);
 
             //gerekiyorsa hedefe dön
-            if(robot.shouldTurnTarget)
+            if(robot.shouldTurnTarget())
                 robot.setTargetHeading(robot.getShotHeading());
 
             //hub'ın açılmasına az kalmışsa bekle
